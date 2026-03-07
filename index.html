@@ -1,89 +1,70 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="ko">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Watermelon Online</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Pretendard:wght@400;500;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="./styles.css" />
+  <title>Watermelon Game</title>
+  <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
-  <div class="page">
-    <header class="hero">
-      <div>
-        <p class="eyebrow">GitHub Pages + Supabase</p>
-        <h1>🍉 Watermelon Online</h1>
-        <p class="subtitle">README 링크로 바로 들어와 플레이하고, GitHub 로그인 사용자 최고 점수를 온라인 랭킹에 반영하는 수박 게임</p>
+  <main class="app">
+    <section class="panel left-panel">
+      <h1>🍉 Watermelon Game</h1>
+      <p class="subtitle">같은 과일을 합쳐 더 큰 과일을 만들고, 수박까지 도달해 보세요.</p>
+
+      <div class="score-wrap">
+        <div class="score-card">
+          <span class="label">점수</span>
+          <strong id="score">0</strong>
+        </div>
+        <div class="score-card">
+          <span class="label">최고 기록</span>
+          <strong id="bestScore">0</strong>
+        </div>
       </div>
-      <div class="hero-actions">
-        <button id="loginBtn" class="btn primary">GitHub 로그인</button>
-        <button id="logoutBtn" class="btn ghost" hidden>로그아웃</button>
+
+      <div class="controls">
+        <button id="startBtn">새 게임</button>
+        <button id="restartBtn">다시 시작</button>
+        <button id="muteBtn">사운드: OFF</button>
       </div>
-    </header>
 
-    <main class="layout">
-      <section class="panel game-panel">
-        <div class="game-topbar">
-          <div>
-            <p class="label">현재 점수</p>
-            <strong id="score">0</strong>
-          </div>
-          <div>
-            <p class="label">내 최고 점수</p>
-            <strong id="bestScore">0</strong>
-          </div>
-          <div>
-            <p class="label">다음 과일</p>
-            <strong id="nextFruit">🍒</strong>
+      <div class="guide">
+        <h2>조작 방법</h2>
+        <ul>
+          <li>마우스를 움직여 과일 떨어질 위치를 정합니다.</li>
+          <li>클릭 또는 스페이스바로 과일을 떨어뜨립니다.</li>
+          <li>같은 단계 과일이 닿으면 합쳐져 더 큰 과일이 됩니다.</li>
+          <li>과일이 상단 위험선 위에서 오래 버티면 게임 오버입니다.</li>
+        </ul>
+      </div>
+    </section>
+
+    <section class="game-section">
+      <div class="game-header">
+        <div>
+          <span class="mini-label">다음 과일</span>
+          <div class="next-preview" id="nextPreview"></div>
+        </div>
+        <div class="status" id="statusText">준비 완료</div>
+      </div>
+
+      <div class="game-wrap">
+        <canvas id="gameCanvas" width="420" height="720"></canvas>
+        <div class="danger-line"></div>
+        <div class="drop-indicator" id="dropIndicator"></div>
+        <div class="overlay hidden" id="gameOverOverlay">
+          <div class="overlay-card">
+            <h2>게임 오버</h2>
+            <p id="finalScoreText">최종 점수: 0</p>
+            <button id="playAgainBtn">다시 하기</button>
           </div>
         </div>
+      </div>
+    </section>
+  </main>
 
-        <div class="canvas-wrap">
-          <canvas id="gameCanvas" width="420" height="700"></canvas>
-          <div class="guide-line"></div>
-        </div>
-
-        <div class="game-actions">
-          <button id="restartBtn" class="btn primary">다시 시작</button>
-          <button id="submitBtn" class="btn success">최고 기록 제출</button>
-        </div>
-
-        <p id="status" class="status">로그인하지 않아도 플레이 가능. 랭킹 등록은 GitHub 로그인 후 가능.</p>
-      </section>
-
-      <aside class="sidebar">
-        <section class="panel user-panel">
-          <p class="section-title">내 계정</p>
-          <div id="userBox" class="user-box muted">
-            <p>현재 로그인되지 않음</p>
-          </div>
-        </section>
-
-        <section class="panel leaderboard-panel">
-          <div class="leaderboard-header">
-            <p class="section-title">실시간 랭킹</p>
-            <button id="refreshLeaderboardBtn" class="btn tiny ghost">새로고침</button>
-          </div>
-          <ol id="leaderboard" class="leaderboard-list"></ol>
-        </section>
-
-        <section class="panel howto-panel">
-          <p class="section-title">플레이 방법</p>
-          <ul>
-            <li>마우스로 위치를 정한 뒤 클릭하면 과일이 떨어집니다.</li>
-            <li>같은 과일끼리 닿으면 한 단계 큰 과일로 합쳐집니다.</li>
-            <li>과일이 빨간 기준선을 넘은 채로 오래 남아 있으면 게임 오버입니다.</li>
-            <li>로그인 상태에서 최고 기록을 갱신하면 제출 버튼으로 랭킹 업로드가 가능합니다.</li>
-          </ul>
-        </section>
-      </aside>
-    </main>
-  </div>
-
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script type="module" src="./config.js"></script>
-  <script type="module" src="./app.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/matter-js@0.20.0/build/matter.min.js"></script>
+  <script type="module" src="main.js"></script>
 </body>
 </html>
