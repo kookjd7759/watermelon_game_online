@@ -1,70 +1,83 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="ko">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Watermelon Game</title>
-  <link rel="stylesheet" href="styles.css" />
+  <title>Watermelon Game HQ</title>
+  <meta name="description" content="GitHub Pages에서 바로 실행되는 고퀄리티 수박 게임" />
+  <link rel="stylesheet" href="./styles.css" />
 </head>
 <body>
-  <main class="app">
-    <section class="panel left-panel">
-      <h1>🍉 Watermelon Game</h1>
-      <p class="subtitle">같은 과일을 합쳐 더 큰 과일을 만들고, 수박까지 도달해 보세요.</p>
+  <div class="page">
+    <aside class="panel panel-left">
+      <div class="brand">
+        <div class="brand-badge">🍉</div>
+        <div>
+          <h1>Watermelon Game HQ</h1>
+          <p>가볍고 부드럽게 돌아가도록 최적화한 브라우저 수박 게임</p>
+        </div>
+      </div>
 
-      <div class="score-wrap">
-        <div class="score-card">
-          <span class="label">점수</span>
+      <section class="card score-card">
+        <div class="score-row">
+          <span>점수</span>
           <strong id="score">0</strong>
         </div>
-        <div class="score-card">
-          <span class="label">최고 기록</span>
+        <div class="score-row">
+          <span>최고 기록</span>
           <strong id="bestScore">0</strong>
         </div>
-      </div>
-
-      <div class="controls">
-        <button id="startBtn">새 게임</button>
-        <button id="restartBtn">다시 시작</button>
-        <button id="muteBtn">사운드: OFF</button>
-      </div>
-
-      <div class="guide">
-        <h2>조작 방법</h2>
-        <ul>
-          <li>마우스를 움직여 과일 떨어질 위치를 정합니다.</li>
-          <li>클릭 또는 스페이스바로 과일을 떨어뜨립니다.</li>
-          <li>같은 단계 과일이 닿으면 합쳐져 더 큰 과일이 됩니다.</li>
-          <li>과일이 상단 위험선 위에서 오래 버티면 게임 오버입니다.</li>
-        </ul>
-      </div>
-    </section>
-
-    <section class="game-section">
-      <div class="game-header">
-        <div>
-          <span class="mini-label">다음 과일</span>
-          <div class="next-preview" id="nextPreview"></div>
+        <div class="score-row">
+          <span>다음 과일</span>
+          <div id="nextFruitBadge" class="fruit-badge">🍒</div>
         </div>
-        <div class="status" id="statusText">준비 완료</div>
+      </section>
+
+      <section class="card controls-card">
+        <h2>조작법</h2>
+        <ul>
+          <li>마우스 / 터치: 위치 이동</li>
+          <li>클릭 / 탭 / 스페이스: 과일 떨어뜨리기</li>
+          <li>R: 다시 시작</li>
+          <li>P: 일시정지</li>
+        </ul>
+      </section>
+
+      <section class="card legend-card">
+        <h2>합체 순서</h2>
+        <div id="legend" class="legend"></div>
+      </section>
+    </aside>
+
+    <main class="board-wrap">
+      <div class="board-topbar">
+        <div class="pill">GitHub Pages Ready</div>
+        <div class="pill">60 FPS 지향</div>
+        <div class="pill">모바일 지원</div>
       </div>
 
-      <div class="game-wrap">
-        <canvas id="gameCanvas" width="420" height="720"></canvas>
-        <div class="danger-line"></div>
-        <div class="drop-indicator" id="dropIndicator"></div>
-        <div class="overlay hidden" id="gameOverOverlay">
+      <div class="canvas-shell">
+        <canvas id="game" width="480" height="760" aria-label="수박 게임 캔버스"></canvas>
+        <div id="overlay" class="overlay hidden">
           <div class="overlay-card">
-            <h2>게임 오버</h2>
-            <p id="finalScoreText">최종 점수: 0</p>
-            <button id="playAgainBtn">다시 하기</button>
+            <div id="overlayTitle" class="overlay-title">Game Over</div>
+            <div class="overlay-score">
+              <span>최종 점수</span>
+              <strong id="finalScore">0</strong>
+            </div>
+            <button id="restartButton" class="primary-btn">다시 시작</button>
           </div>
         </div>
       </div>
-    </section>
-  </main>
 
-  <script src="https://cdn.jsdelivr.net/npm/matter-js@0.20.0/build/matter.min.js"></script>
-  <script type="module" src="main.js"></script>
+      <div class="board-bottom">
+        <button id="dropButton" class="secondary-btn">과일 떨어뜨리기</button>
+        <button id="pauseButton" class="secondary-btn">일시정지</button>
+        <button id="resetButton" class="secondary-btn danger">리셋</button>
+      </div>
+    </main>
+  </div>
+
+  <script src="./game.js"></script>
 </body>
 </html>
