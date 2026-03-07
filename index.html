@@ -6,83 +6,73 @@
   <title>Watermelon Game</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Jua&family=Pretendard:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
-  <div class="topbar">
-    <div class="brand"><span class="brand-icon">🍉</span><span class="brand-text">playSuikaGame</span></div>
-  </div>
+  <header class="topbar">
+    <div class="brand"><span class="brand-icon">🍉</span> playSuikaGame</div>
+  </header>
 
-  <main class="layout">
-    <aside class="panel left-panel">
-      <section class="bubble score-bubble">
+  <main class="app-shell">
+    <aside class="side left-panel">
+      <section class="score-bubble glass-bubble">
         <h2>스코어</h2>
-        <div class="score-value" id="score">0</div>
-        <div class="best-label">최고 점수</div>
-        <div class="best-value" id="bestScore">0</div>
+        <div id="score" class="big-score">0</div>
+        <div class="best-wrap">
+          <span>최고 점수</span>
+          <strong id="bestScore">0</strong>
+        </div>
       </section>
 
-      <section class="leaderboard-card">
+      <section class="leaderboard card">
         <h3>리더보드</h3>
-        <div class="leaderboard-tabs">
+        <div class="board-tabs">
           <button class="tab active">매일</button>
           <button class="tab">매주</button>
           <button class="tab">매월</button>
         </div>
-        <div class="leaderboard-list">
-          <div class="rank-row gold"><span class="medal">1</span><span class="points">27429</span></div>
-          <div class="rank-row blue"><span class="medal">2</span><span class="points">24013</span></div>
-          <div class="rank-row bronze"><span class="medal">3</span><span class="points">23334</span></div>
-          <div class="rank-row silver"><span class="medal">4</span><span class="points">23030</span></div>
-          <div class="rank-row silver"><span class="medal">5</span><span class="points">19611</span></div>
-        </div>
+        <ol class="board-list">
+          <li class="rank-1"><span>1</span><strong>27429</strong></li>
+          <li class="rank-2"><span>2</span><strong>24013</strong></li>
+          <li class="rank-3"><span>3</span><strong>23334</strong></li>
+          <li><span>4</span><strong>23030</strong></li>
+          <li><span>5</span><strong>19611</strong></li>
+        </ol>
       </section>
     </aside>
 
-    <section class="game-shell">
-      <div class="mascot-wrap">
-        <div class="mascot-face">☁️</div>
-        <div class="spawn-fruit" id="previewFruit">🍒</div>
-      </div>
-
-      <div class="game-frame">
-        <canvas id="gameCanvas" width="520" height="700" aria-label="수박 게임"></canvas>
-        <div class="aim-line" id="aimLine"></div>
-        <div class="drop-indicator" id="dropIndicator"></div>
+    <section class="center-panel">
+      <div class="mascot">☁️</div>
+      <div class="drop-preview" id="dropPreview">🍒</div>
+      <div class="game-wrap">
+        <canvas id="gameCanvas" width="420" height="640" aria-label="수박 게임"></canvas>
+        <div class="guide-line"></div>
         <div class="overlay hidden" id="gameOverOverlay">
           <div class="overlay-card">
             <h2>게임 오버</h2>
             <p>최종 점수 <strong id="finalScore">0</strong></p>
-            <button id="restartBtn">다시 하기</button>
+            <button id="restartBtn">다시 시작</button>
           </div>
         </div>
       </div>
-
-      <div class="mobile-info">
-        <button id="restartFloating">다시하기</button>
+      <div class="controls-card card compact">
+        <div><strong>조작:</strong> 마우스/터치로 이동 · 클릭/탭으로 떨어뜨리기</div>
+        <div><strong>R</strong> 다시 시작</div>
       </div>
     </section>
 
-    <aside class="panel right-panel">
-      <section class="bubble next-bubble">
+    <aside class="side right-panel">
+      <section class="next-bubble glass-bubble">
         <h2>다음</h2>
-        <div class="next-fruit" id="nextFruit">🍒</div>
+        <div id="nextFruit" class="next-fruit">🍒</div>
       </section>
 
-      <section class="chain-card">
+      <section class="ring-card">
         <h3>신기의 고리</h3>
         <div class="fruit-ring">
-          <span style="--i:0">🫐</span>
-          <span style="--i:1">🥝</span>
-          <span style="--i:2">🍋</span>
-          <span style="--i:3">🍑</span>
-          <span style="--i:4">🍐</span>
-          <span style="--i:5">🍒</span>
-          <span style="--i:6">🍊</span>
-          <span style="--i:7">🫐</span>
-          <span style="--i:8">🍓</span>
-          <span style="--i:9">🍎</span>
+          <span>🟢</span><span>🍒</span><span>🍓</span><span>🫐</span><span>🍊</span>
+          <span>🍎</span><span>🍐</span><span>🍑</span><span>🍍</span><span>🍈</span>
         </div>
       </section>
     </aside>
