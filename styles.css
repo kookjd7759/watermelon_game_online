@@ -31,11 +31,11 @@ body {
 .brand-icon { margin-right: 6px; }
 
 .layout {
-  max-width: 1320px;
+  max-width: 1180px;
   margin: 0 auto;
   padding: 18px 18px 26px;
   display: grid;
-  grid-template-columns: 280px minmax(440px, 1fr) 280px;
+  grid-template-columns: 240px minmax(440px, 1fr) 240px;
   gap: 28px;
   align-items: start;
 }
@@ -44,6 +44,11 @@ body {
   display: flex;
   flex-direction: column;
   gap: 18px;
+}
+
+.left-panel,
+.right-panel {
+  padding-top: 30px;
 }
 
 .center-panel {
@@ -60,14 +65,23 @@ body {
   margin-top: 8px;
 }
 
+.board-shell {
+  position: relative;
+  width: 448px;
+  max-width: 100%;
+  padding-top: 8px;
+}
+
 .preview-fruit {
   position: absolute;
-  top: 86px;
+  top: -2px;
   left: 50%;
   transform: translateX(-50%);
   z-index: 5;
   font-size: 28px;
+  line-height: 1;
   pointer-events: none;
+  text-shadow: 0 2px 6px rgba(0,0,0,0.12);
 }
 
 .bubble {
@@ -117,79 +131,6 @@ body {
   border-radius: 18px;
   box-shadow: 0 6px 0 rgba(120, 75, 22, 0.14);
   color: var(--brown);
-}
-
-.leaderboard {
-  overflow: hidden;
-}
-
-.leaderboard h3 {
-  margin: 14px 0 10px;
-  text-align: center;
-  font-size: 28px;
-  color: #fff3d6;
-  text-shadow: 0 2px 0 rgba(118, 69, 14, 0.6);
-}
-
-.tabs {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-}
-
-.tabs button {
-  border: 0;
-  padding: 14px 0;
-  color: #fff;
-  background: #e6ad5a;
-  font-weight: 700;
-  border-right: 1px solid rgba(255,255,255,0.4);
-}
-
-.tabs button:last-child { border-right: 0; }
-.tabs .active { background: #e8942d; }
-
-.ranking-list {
-  list-style: none;
-  margin: 0;
-  padding: 14px 12px 16px;
-  display: grid;
-  gap: 10px;
-}
-
-.ranking-list li {
-  background: #b0b0b3;
-  color: #fff;
-  border-radius: 999px;
-  min-height: 42px;
-  display: flex;
-  align-items: center;
-  padding: 0 14px;
-  font-weight: 800;
-  font-size: 17px;
-}
-
-.ranking-list li span {
-  width: 34px;
-  height: 34px;
-  display: grid;
-  place-items: center;
-  border-radius: 50%;
-  background: rgba(255,255,255,0.18);
-  margin-right: 14px;
-}
-
-.ranking-list .gold { background: #f1cc58; }
-.ranking-list .gold span { background: #ffca0a; }
-.ranking-list .silver { background: #8daddd; }
-.ranking-list .silver span { background: #5488de; }
-.ranking-list .bronze { background: #d5aa77; }
-.ranking-list .bronze span { background: #d08328; }
-
-.board-shell {
-  position: relative;
-  width: 448px;
-  max-width: 100%;
-  padding-top: 8px;
 }
 
 #gameCanvas {
@@ -281,18 +222,9 @@ body {
   left: 50%;
   top: 50%;
   font-size: 24px;
+  transform: translate(-50%, -50%) rotate(var(--a)) translateY(-82px) rotate(calc(var(--a) * -1));
+  transform-origin: center;
 }
-
-.fruit-ring span:nth-child(1)  { transform: rotate(0deg) translateY(-82px) translateX(-50%); }
-.fruit-ring span:nth-child(2)  { transform: rotate(36deg) translateY(-82px) translateX(-50%); }
-.fruit-ring span:nth-child(3)  { transform: rotate(72deg) translateY(-82px) translateX(-50%); }
-.fruit-ring span:nth-child(4)  { transform: rotate(108deg) translateY(-82px) translateX(-50%); }
-.fruit-ring span:nth-child(5)  { transform: rotate(144deg) translateY(-82px) translateX(-50%); }
-.fruit-ring span:nth-child(6)  { transform: rotate(180deg) translateY(-82px) translateX(-50%); }
-.fruit-ring span:nth-child(7)  { transform: rotate(216deg) translateY(-82px) translateX(-50%); }
-.fruit-ring span:nth-child(8)  { transform: rotate(252deg) translateY(-82px) translateX(-50%); }
-.fruit-ring span:nth-child(9)  { transform: rotate(288deg) translateY(-82px) translateX(-50%); }
-.fruit-ring span:nth-child(10) { transform: rotate(324deg) translateY(-82px) translateX(-50%); }
 
 @media (max-width: 1120px) {
   .layout {
@@ -307,6 +239,11 @@ body {
     justify-content: center;
   }
 
+  .left-panel,
+  .right-panel {
+    padding-top: 0;
+  }
+
   .bubble { width: 210px; height: 210px; }
 }
 
@@ -316,4 +253,6 @@ body {
   .bubble { width: 190px; height: 190px; }
   .bubble h2 { font-size: 24px; }
   .score-value { font-size: 46px; }
+  .fruit-ring { width: 190px; height: 190px; }
+  .fruit-ring span { transform: translate(-50%, -50%) rotate(var(--a)) translateY(-74px) rotate(calc(var(--a) * -1)); }
 }

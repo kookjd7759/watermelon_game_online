@@ -19,29 +19,13 @@
         <div class="best-label">최고 점수</div>
         <div class="best-value" id="bestScore">0</div>
       </section>
-
-      <section class="leaderboard card">
-        <h3>리더보드</h3>
-        <div class="tabs">
-          <button class="active" type="button">매일</button>
-          <button type="button">매주</button>
-          <button type="button">매월</button>
-        </div>
-        <ol class="ranking-list">
-          <li class="gold"><span>1</span><strong>27429</strong></li>
-          <li class="silver"><span>2</span><strong>24013</strong></li>
-          <li class="bronze"><span>3</span><strong>23334</strong></li>
-          <li><span>4</span><strong>23030</strong></li>
-          <li><span>5</span><strong>19611</strong></li>
-        </ol>
-      </section>
     </aside>
 
     <section class="center-panel">
       <div class="mascot">☁️</div>
-      <div class="preview-fruit" id="previewFruit">🍒</div>
 
-      <div class="board-shell">
+      <div class="board-shell" id="boardShell">
+        <div class="preview-fruit" id="previewFruit">🍒</div>
         <canvas id="gameCanvas" width="420" height="640"></canvas>
         <div class="overlay hidden" id="gameOverOverlay">
           <div class="overlay-card">
@@ -67,8 +51,16 @@
       <section class="ring-box">
         <h3>신기의 고리</h3>
         <div class="fruit-ring">
-          <span>🟢</span><span>🍒</span><span>🍓</span><span>🫐</span><span>🍊</span>
-          <span>🍎</span><span>🍐</span><span>🍑</span><span>🍍</span><span>🍈</span>
+          <span style="--a:0deg">🟢</span>
+          <span style="--a:36deg">🍒</span>
+          <span style="--a:72deg">🍓</span>
+          <span style="--a:108deg">🫐</span>
+          <span style="--a:144deg">🍊</span>
+          <span style="--a:180deg">🍎</span>
+          <span style="--a:216deg">🍐</span>
+          <span style="--a:252deg">🍑</span>
+          <span style="--a:288deg">🍍</span>
+          <span style="--a:324deg">🍈</span>
         </div>
       </section>
     </aside>

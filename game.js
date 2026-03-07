@@ -8,6 +8,7 @@ const previewFruitEl = document.getElementById('previewFruit');
 const overlayEl = document.getElementById('gameOverOverlay');
 const finalScoreEl = document.getElementById('finalScore');
 const restartBtn = document.getElementById('restartBtn');
+const boardShell = document.getElementById('boardShell');
 
 const WIDTH = canvas.width;
 const HEIGHT = canvas.height;
@@ -65,8 +66,10 @@ function updatePreview() {
 }
 
 function updatePreviewPosition() {
-  const rect = canvas.getBoundingClientRect();
-  const left = rect.left + window.scrollX + (pointerX / WIDTH) * rect.width;
+  const shellWidth = boardShell.clientWidth;
+  const canvasWidth = canvas.getBoundingClientRect().width;
+  const borderOffset = (shellWidth - canvasWidth) / 2;
+  const left = borderOffset + (pointerX / WIDTH) * canvasWidth;
   previewFruitEl.style.left = `${left}px`;
 }
 
