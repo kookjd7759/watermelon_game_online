@@ -5,6 +5,7 @@ const scoreEl = document.getElementById('score');
 const bestScoreEl = document.getElementById('bestScore');
 const nextFruitEl = document.getElementById('nextFruit');
 const previewFruitEl = document.getElementById('previewFruit');
+const mascotEl = document.getElementById('mascot');
 const overlayEl = document.getElementById('gameOverOverlay');
 const finalScoreEl = document.getElementById('finalScore');
 const restartBtn = document.getElementById('restartBtn');
@@ -38,6 +39,7 @@ const FRUITS = [
 let fruits = [];
 let particles = [];
 let pointerX = WIDTH / 2;
+let currentType = getRandomStartType();
 let nextType = getRandomStartType();
 let bestScore = Number(localStorage.getItem('watermelon-best-score') || 0);
 let score = 0;
@@ -60,17 +62,17 @@ function clamp(value, min, max) {
 }
 
 function updatePreview() {
-  const emoji = FRUITS[nextType].emoji;
-  nextFruitEl.textContent = emoji;
-  previewFruitEl.textContent = emoji;
+  previewFruitEl.textContent = FRUITS[currentType].emoji;
+  nextFruitEl.textContent = FRUITS[nextType].emoji;
 }
 
 function updatePreviewPosition() {
-  const shellWidth = boardShell.clientWidth;
-  const canvasWidth = canvas.getBoundingClientRect().width;
-  const borderOffset = (shellWidth - canvasWidth) / 2;
-  const left = borderOffset + (pointerX / WIDTH) * canvasWidth;
+  const rect = canvas.getBoundingClientRect();
+  const shellRect = boardShell.getBoundingClientRect();
+  const left = rect.left - shellRect.left + (pointerX / WIDTH) * rect.width;
+
   previewFruitEl.style.left = `${left}px`;
+  mascotEl.style.left = `${left}px`;
 }
 
 function createFruit(type, x, y = SPAWN_Y) {
@@ -90,10 +92,13 @@ function createFruit(type, x, y = SPAWN_Y) {
 
 function spawnFruit() {
   if (gameOver || !canDrop) return;
-  fruits.push(createFruit(nextType, pointerX));
+
+  fruits.push(createFruit(currentType, pointerX));
+  currentType = nextType;
   nextType = getRandomStartType();
   updatePreview();
   canDrop = false;
+
   setTimeout(() => {
     canDrop = true;
   }, DROP_COOLDOWN);
@@ -262,6 +267,21 @@ function drawFruit(fruit) {
   ctx.restore();
 }
 
+function drawGuideLine() {
+  const gradient = ctx.createLinearGradient(pointerX, SPAWN_Y + 14, pointerX, HEIGHT - 36);
+  gradient.addColorStop(0, 'rgba(255, 255, 255, 0.65)');
+  gradient.addColorStop(0.22, 'rgba(255, 255, 255, 0.34)');
+  gradient.addColorStop(0.65, 'rgba(255, 255, 255, 0.1)');
+  gradient.addColorStop(1, 'rgba(255, 255, 255, 0)');
+
+  ctx.strokeStyle = gradient;
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.moveTo(pointerX, SPAWN_Y + FRUITS[currentType].radius + 8);
+  ctx.lineTo(pointerX, HEIGHT - 24);
+  ctx.stroke();
+}
+
 function drawBackground() {
   ctx.fillStyle = '#ecdcb0';
   ctx.fillRect(0, 0, WIDTH, HEIGHT);
@@ -275,9 +295,11 @@ function drawBackground() {
   ctx.stroke();
   ctx.setLineDash([]);
 
+  drawGuideLine();
+
   ctx.fillStyle = 'rgba(255,255,255,0.18)';
   ctx.beginPath();
-  ctx.arc(pointerX, 38, FRUITS[nextType].radius, 0, Math.PI * 2);
+  ctx.arc(pointerX, SPAWN_Y, FRUITS[currentType].radius, 0, Math.PI * 2);
   ctx.fill();
 }
 
@@ -322,6 +344,7 @@ function resetGame() {
   score = 0;
   scoreEl.textContent = '0';
   pointerX = WIDTH / 2;
+  currentType = getRandomStartType();
   nextType = getRandomStartType();
   canDrop = true;
   gameOver = false;
