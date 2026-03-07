@@ -59,6 +59,18 @@ body {
   gap: 12px;
 }
 
+.mascot {
+  position: absolute;
+  top: -54px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 6;
+  font-size: 58px;
+  line-height: 1;
+  pointer-events: none;
+  will-change: left;
+}
+
 .board-shell {
   position: relative;
   width: 448px;
@@ -66,28 +78,15 @@ body {
   padding-top: 8px;
 }
 
-.mascot {
-  position: absolute;
-  top: -66px;
-  left: 50%;
-  z-index: 7;
-  font-size: 58px;
-  line-height: 1;
-  pointer-events: none;
-  transform: translateX(-50%);
-  transition: left 0.04s linear;
-  filter: drop-shadow(0 4px 10px rgba(0, 0, 0, 0.08));
-}
-
 .preview-fruit {
   position: absolute;
-  top: 12px;
+  top: -2px;
   left: 50%;
-  z-index: 6;
+  transform: translateX(-50%);
+  z-index: 5;
   font-size: 28px;
   line-height: 1;
   pointer-events: none;
-  transform: translateX(-50%);
   text-shadow: 0 2px 6px rgba(0,0,0,0.12);
 }
 
@@ -213,42 +212,23 @@ body {
 }
 
 .fruit-ring {
-  --ring-size: 210px;
-  --orbit: 76px;
-  width: var(--ring-size);
-  height: var(--ring-size);
+  width: 210px;
+  height: 210px;
   margin: 0 auto;
   position: relative;
   border-radius: 50%;
   background:
-    radial-gradient(circle at center, rgba(239, 255, 186, 0.92) 0 31%, rgba(214, 239, 119, 0.92) 32% 56%, transparent 57%),
-    radial-gradient(circle at center, rgba(239,255,186,0.94), rgba(172,219,80,0.9));
+    radial-gradient(circle at center, transparent 27%, rgba(245,250,188,0.96) 28%, rgba(214,239,119,0.92) 50%, transparent 51%),
+    radial-gradient(circle at center, rgba(239,255,186,0.92), rgba(172,219,80,0.88));
   box-shadow: inset 0 8px 22px rgba(255,255,255,0.32), 0 6px 18px rgba(0,0,0,0.08);
-}
-
-.fruit-ring::before {
-  content: "";
-  position: absolute;
-  inset: 42px;
-  border-radius: 50%;
-  background: radial-gradient(circle at 35% 30%, rgba(255,255,255,0.45), rgba(255,255,255,0.06) 48%, transparent 60%);
 }
 
 .fruit-ring span {
   position: absolute;
   left: 50%;
   top: 50%;
-  width: 30px;
-  height: 30px;
-  display: grid;
-  place-items: center;
-  font-size: 22px;
-  line-height: 1;
-  transform:
-    translate(-50%, -50%)
-    rotate(var(--a))
-    translateY(calc(var(--orbit) * -1))
-    rotate(calc(var(--a) * -1));
+  font-size: 24px;
+  transform: translate(-50%, -50%) rotate(var(--a)) translateY(-82px) rotate(calc(var(--a) * -1));
   transform-origin: center;
 }
 
@@ -279,9 +259,6 @@ body {
   .bubble { width: 190px; height: 190px; }
   .bubble h2 { font-size: 24px; }
   .score-value { font-size: 46px; }
-  .fruit-ring {
-    --ring-size: 190px;
-    --orbit: 69px;
-  }
-  .mascot { font-size: 50px; top: -60px; }
+  .fruit-ring { width: 190px; height: 190px; }
+  .fruit-ring span { transform: translate(-50%, -50%) rotate(var(--a)) translateY(-74px) rotate(calc(var(--a) * -1)); }
 }

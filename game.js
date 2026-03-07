@@ -5,7 +5,7 @@ const scoreEl = document.getElementById('score');
 const bestScoreEl = document.getElementById('bestScore');
 const nextFruitEl = document.getElementById('nextFruit');
 const previewFruitEl = document.getElementById('previewFruit');
-const mascotEl = document.getElementById('mascot');
+const cloudEl = document.getElementById('cloudMascot');
 const overlayEl = document.getElementById('gameOverOverlay');
 const finalScoreEl = document.getElementById('finalScore');
 const restartBtn = document.getElementById('restartBtn');
@@ -18,10 +18,11 @@ const DROP_X_MAX = WIDTH - 20;
 const SPAWN_Y = 42;
 const DANGER_LINE = 92;
 const DROP_COOLDOWN = 280;
-const GRAVITY = 0.22;
-const AIR_DAMPING = 0.998;
+const BASE_GRAVITY = 0.18;
+const AIR_DAMPING = 0.997;
 const BOUNCE = 0.12;
-const FLOOR_FRICTION = 0.985;
+const FLOOR_FRICTION = 0.978;
+const SURFACE_FRICTION = 0.992;
 
 const FRUITS = [
   { name: '체리', emoji: '🍒', radius: 16, color: '#ef4c4c', score: 1 },
@@ -61,18 +62,33 @@ function clamp(value, min, max) {
   return Math.max(min, Math.min(max, value));
 }
 
+function lerp(a, b, t) {
+  return a + (b - a) * t;
+}
+
+function getFruitMass(radius) {
+  return Math.max(1, (radius * radius) / 190);
+}
+
+function getGravityScale(type) {
+  return lerp(0.75, 1.35, type / (FRUITS.length - 1));
+}
+
 function updatePreview() {
   previewFruitEl.textContent = FRUITS[currentType].emoji;
   nextFruitEl.textContent = FRUITS[nextType].emoji;
 }
 
 function updatePreviewPosition() {
-  const rect = canvas.getBoundingClientRect();
-  const shellRect = boardShell.getBoundingClientRect();
-  const left = rect.left - shellRect.left + (pointerX / WIDTH) * rect.width;
+  const shellWidth = boardShell.clientWidth;
+  const canvasWidth = canvas.getBoundingClientRect().width;
+  const borderOffset = (shellWidth - canvasWidth) / 2;
+  const left = borderOffset + (pointerX / WIDTH) * canvasWidth;
 
   previewFruitEl.style.left = `${left}px`;
-  mascotEl.style.left = `${left}px`;
+  if (cloudEl) {
+    cloudEl.style.left = `${left}px`;
+  }
 }
 
 function createFruit(type, x, y = SPAWN_Y) {
@@ -83,8 +99,10 @@ function createFruit(type, x, y = SPAWN_Y) {
     x: clamp(x, meta.radius + 2, WIDTH - meta.radius - 2),
     y,
     vx: 0,
-    vy: 0.2,
+    vy: 0.18,
     r: meta.radius,
+    mass: getFruitMass(meta.radius),
+    gravityScale: getGravityScale(type),
     remove: false,
     mergeCooldown: 8,
   };
@@ -97,8 +115,8 @@ function spawnFruit() {
   currentType = nextType;
   nextType = getRandomStartType();
   updatePreview();
-  canDrop = false;
 
+  canDrop = false;
   setTimeout(() => {
     canDrop = true;
   }, DROP_COOLDOWN);
@@ -156,36 +174,49 @@ function solveCollision(a, b) {
   const minDistance = a.r + b.r;
 
   if (distance >= minDistance) return;
-
   if (mergeFruits(a, b)) return;
 
   const nx = dx / distance;
   const ny = dy / distance;
   const overlap = minDistance - distance;
-  const push = overlap * 0.5;
+  const totalMass = a.mass + b.mass;
+  const moveA = overlap * (b.mass / totalMass);
+  const moveB = overlap * (a.mass / totalMass);
 
-  a.x -= nx * push;
-  a.y -= ny * push;
-  b.x += nx * push;
-  b.y += ny * push;
+  a.x -= nx * moveA;
+  a.y -= ny * moveA;
+  b.x += nx * moveB;
+  b.y += ny * moveB;
 
   const relativeVx = b.vx - a.vx;
   const relativeVy = b.vy - a.vy;
   const speedAlongNormal = relativeVx * nx + relativeVy * ny;
   if (speedAlongNormal > 0) return;
 
-  const impulse = -(1 + BOUNCE) * speedAlongNormal * 0.5;
+  const restitution = 1 + BOUNCE;
+  const impulse = -(restitution * speedAlongNormal) / ((1 / a.mass) + (1 / b.mass));
   const ix = impulse * nx;
   const iy = impulse * ny;
-  a.vx -= ix;
-  a.vy -= iy;
-  b.vx += ix;
-  b.vy += iy;
+
+  a.vx -= ix / a.mass;
+  a.vy -= iy / a.mass;
+  b.vx += ix / b.mass;
+  b.vy += iy / b.mass;
+
+  const tx = -ny;
+  const ty = nx;
+  const tangentSpeed = relativeVx * tx + relativeVy * ty;
+  const frictionImpulse = tangentSpeed * 0.018;
+
+  a.vx += (frictionImpulse * tx * b.mass) / totalMass;
+  a.vy += (frictionImpulse * ty * b.mass) / totalMass;
+  b.vx -= (frictionImpulse * tx * a.mass) / totalMass;
+  b.vy -= (frictionImpulse * ty * a.mass) / totalMass;
 }
 
 function physicsStep() {
   for (const fruit of fruits) {
-    fruit.vy += GRAVITY;
+    fruit.vy += BASE_GRAVITY * fruit.gravityScale;
     fruit.vx *= AIR_DAMPING;
     fruit.vy *= 0.999;
     fruit.x += fruit.vx;
@@ -194,25 +225,32 @@ function physicsStep() {
 
     if (fruit.x - fruit.r < 0) {
       fruit.x = fruit.r;
-      fruit.vx *= -0.35;
+      fruit.vx *= -0.3;
     }
     if (fruit.x + fruit.r > WIDTH) {
       fruit.x = WIDTH - fruit.r;
-      fruit.vx *= -0.35;
+      fruit.vx *= -0.3;
     }
     if (fruit.y + fruit.r > HEIGHT) {
       fruit.y = HEIGHT - fruit.r;
       fruit.vy *= -BOUNCE;
       fruit.vx *= FLOOR_FRICTION;
       if (Math.abs(fruit.vy) < 0.45) fruit.vy = 0;
+      if (Math.abs(fruit.vx) < 0.03) fruit.vx = 0;
     }
   }
 
-  for (let n = 0; n < 2; n += 1) {
+  for (let n = 0; n < 3; n += 1) {
     for (let i = 0; i < fruits.length; i += 1) {
       for (let j = i + 1; j < fruits.length; j += 1) {
         if (!fruits[i].remove && !fruits[j].remove) solveCollision(fruits[i], fruits[j]);
       }
+    }
+  }
+
+  for (const fruit of fruits) {
+    if (fruit.y + fruit.r >= HEIGHT - 0.5) {
+      fruit.vx *= SURFACE_FRICTION;
     }
   }
 
@@ -268,17 +306,18 @@ function drawFruit(fruit) {
 }
 
 function drawGuideLine() {
-  const gradient = ctx.createLinearGradient(pointerX, SPAWN_Y + 14, pointerX, HEIGHT - 36);
-  gradient.addColorStop(0, 'rgba(255, 255, 255, 0.65)');
-  gradient.addColorStop(0.22, 'rgba(255, 255, 255, 0.34)');
-  gradient.addColorStop(0.65, 'rgba(255, 255, 255, 0.1)');
-  gradient.addColorStop(1, 'rgba(255, 255, 255, 0)');
+  const currentFruit = FRUITS[currentType];
+  const startY = SPAWN_Y + currentFruit.radius + 4;
+  const gradient = ctx.createLinearGradient(pointerX, startY, pointerX, HEIGHT - 18);
+  gradient.addColorStop(0, 'rgba(255,255,255,0.65)');
+  gradient.addColorStop(0.45, 'rgba(255,255,255,0.26)');
+  gradient.addColorStop(1, 'rgba(255,255,255,0)');
 
   ctx.strokeStyle = gradient;
-  ctx.lineWidth = 3;
+  ctx.lineWidth = 2;
   ctx.beginPath();
-  ctx.moveTo(pointerX, SPAWN_Y + FRUITS[currentType].radius + 8);
-  ctx.lineTo(pointerX, HEIGHT - 24);
+  ctx.moveTo(pointerX, startY);
+  ctx.lineTo(pointerX, HEIGHT - 12);
   ctx.stroke();
 }
 
@@ -297,7 +336,7 @@ function drawBackground() {
 
   drawGuideLine();
 
-  ctx.fillStyle = 'rgba(255,255,255,0.18)';
+  ctx.fillStyle = 'rgba(255,255,255,0.16)';
   ctx.beginPath();
   ctx.arc(pointerX, SPAWN_Y, FRUITS[currentType].radius, 0, Math.PI * 2);
   ctx.fill();
