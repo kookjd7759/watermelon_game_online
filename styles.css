@@ -2,11 +2,13 @@
   --bg: #c98d4f;
   --topbar: #ff7d00;
   --cream: #eddcaf;
-  --cream-dark: #e1ca93;
   --frame: #ecd88f;
   --frame-dark: #d5ba6f;
   --brown: #8c5822;
   --white: #fff3d6;
+  --card: #efddb0;
+  --gold: #e2bb39;
+  --danger: #f2644f;
 }
 
 * { box-sizing: border-box; }
@@ -26,6 +28,7 @@ body {
   justify-content: center;
   font-weight: 800;
   font-size: 18px;
+  box-shadow: inset 0 -2px 0 rgba(0,0,0,0.08);
 }
 
 .brand-icon { margin-right: 6px; }
@@ -33,7 +36,7 @@ body {
 .layout {
   max-width: 1180px;
   margin: 0 auto;
-  padding: 18px 18px 26px;
+  padding: 18px 18px 28px;
   display: grid;
   grid-template-columns: 240px minmax(440px, 1fr) 240px;
   gap: 28px;
@@ -48,7 +51,7 @@ body {
 
 .left-panel,
 .right-panel {
-  padding-top: 30px;
+  padding-top: 18px;
 }
 
 .center-panel {
@@ -61,11 +64,11 @@ body {
 
 .mascot {
   position: absolute;
-  top: -54px;
+  top: -32px;
   left: 50%;
   transform: translateX(-50%);
   z-index: 6;
-  font-size: 58px;
+  font-size: 54px;
   line-height: 1;
   pointer-events: none;
   will-change: left;
@@ -80,11 +83,11 @@ body {
 
 .preview-fruit {
   position: absolute;
-  top: -2px;
+  top: -3px;
   left: 50%;
   transform: translateX(-50%);
-  z-index: 5;
-  font-size: 28px;
+  z-index: 7;
+  font-size: 26px;
   line-height: 1;
   pointer-events: none;
   text-shadow: 0 2px 6px rgba(0,0,0,0.12);
@@ -131,12 +134,64 @@ body {
   font-weight: 800;
 }
 
-.card {
-  background: #efddb0;
-  border: 4px solid #e2bb39;
+.card,
+.info-card {
+  background: var(--card);
+  border: 4px solid var(--gold);
   border-radius: 18px;
   box-shadow: 0 6px 0 rgba(120, 75, 22, 0.14);
   color: var(--brown);
+}
+
+.info-card {
+  padding: 14px 16px;
+}
+
+.card-title {
+  font-weight: 800;
+  font-size: 18px;
+  margin-bottom: 10px;
+}
+
+.state-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 110px;
+  padding: 8px 14px;
+  border-radius: 999px;
+  background: #f2e7c9;
+  border: 2px solid rgba(140, 88, 34, 0.18);
+  font-weight: 800;
+}
+
+.state-badge.danger {
+  background: rgba(242, 100, 79, 0.16);
+  color: #b23f2e;
+  border-color: rgba(242, 100, 79, 0.45);
+}
+
+.danger-meter {
+  margin-top: 12px;
+  height: 12px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: rgba(140, 88, 34, 0.12);
+  border: 1px solid rgba(140, 88, 34, 0.15);
+}
+
+.danger-fill {
+  width: 100%;
+  height: 100%;
+  transform-origin: left center;
+  transform: scaleX(0);
+  background: linear-gradient(90deg, #f7c65e, #f2644f);
+}
+
+.danger-help {
+  margin-top: 10px;
+  font-size: 13px;
+  line-height: 1.4;
 }
 
 #gameCanvas {
@@ -157,7 +212,8 @@ body {
   inset: 8px 0 0;
   display: grid;
   place-items: center;
-  background: rgba(92, 55, 17, 0.24);
+  background: rgba(92, 55, 17, 0.28);
+  border-radius: 12px 12px 0 0;
 }
 
 .hidden { display: none; }
@@ -190,6 +246,31 @@ body {
   padding: 12px 16px;
   font-size: 14px;
   line-height: 1.5;
+}
+
+.controls-top,
+.controls-bottom {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.controls-bottom {
+  margin-top: 8px;
+  align-items: center;
+}
+
+.combo-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 92px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: #fff3d6;
+  border: 1px solid rgba(140, 88, 34, 0.16);
+  font-weight: 800;
 }
 
 .next-bubble {
@@ -228,7 +309,7 @@ body {
   left: 50%;
   top: 50%;
   font-size: 24px;
-  transform: translate(-50%, -50%) rotate(var(--a)) translateY(-82px) rotate(calc(var(--a) * -1));
+  transform: translate(-50%, -50%) rotate(var(--a)) translateY(-74px) rotate(calc(var(--a) * -1));
   transform-origin: center;
 }
 
@@ -258,7 +339,6 @@ body {
   .board-shell, .controls { width: 100%; }
   .bubble { width: 190px; height: 190px; }
   .bubble h2 { font-size: 24px; }
-  .score-value { font-size: 46px; }
-  .fruit-ring { width: 190px; height: 190px; }
-  .fruit-ring span { transform: translate(-50%, -50%) rotate(var(--a)) translateY(-74px) rotate(calc(var(--a) * -1)); }
+  .score-value { font-size: 48px; }
+  .controls-top, .controls-bottom { justify-content: center; }
 }

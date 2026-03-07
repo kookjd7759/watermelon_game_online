@@ -19,6 +19,15 @@
         <div class="best-label">최고 점수</div>
         <div class="best-value" id="bestScore">0</div>
       </section>
+
+      <section class="info-card card status-card">
+        <div class="card-title">상태</div>
+        <div class="state-badge" id="stateBadge">준비 완료</div>
+        <div class="danger-meter">
+          <div class="danger-fill" id="dangerFill"></div>
+        </div>
+        <div class="danger-help">위험선 위에 과일이 오래 머무르면 게임 종료</div>
+      </section>
     </aside>
 
     <section class="center-panel">
@@ -36,8 +45,16 @@
       </div>
 
       <div class="controls card">
-        <div>마우스/터치로 위치 이동 · 클릭/탭으로 떨어뜨리기</div>
-        <div><strong>R</strong> 다시 시작 · <strong>← →</strong> 이동 · <strong>Space</strong> 드롭</div>
+        <div class="controls-top">
+          <span>마우스/터치 이동</span>
+          <span>클릭/탭 드롭</span>
+          <span>R 재시작</span>
+        </div>
+        <div class="controls-bottom">
+          <span>← → 이동</span>
+          <span>Space / Enter 드롭</span>
+          <span class="combo-chip" id="comboValue">READY</span>
+        </div>
       </div>
     </section>
 
