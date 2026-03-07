@@ -4,9 +4,6 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Watermelon Game</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
@@ -14,28 +11,26 @@
     <div class="brand"><span class="brand-icon">🍉</span> playSuikaGame</div>
   </header>
 
-  <main class="app-shell">
-    <aside class="side left-panel">
-      <section class="score-bubble glass-bubble">
+  <main class="layout">
+    <aside class="panel left-panel">
+      <section class="bubble score-bubble">
         <h2>스코어</h2>
-        <div id="score" class="big-score">0</div>
-        <div class="best-wrap">
-          <span>최고 점수</span>
-          <strong id="bestScore">0</strong>
-        </div>
+        <div class="score-value" id="score">0</div>
+        <div class="best-label">최고 점수</div>
+        <div class="best-value" id="bestScore">0</div>
       </section>
 
       <section class="leaderboard card">
         <h3>리더보드</h3>
-        <div class="board-tabs">
-          <button class="tab active">매일</button>
-          <button class="tab">매주</button>
-          <button class="tab">매월</button>
+        <div class="tabs">
+          <button class="active" type="button">매일</button>
+          <button type="button">매주</button>
+          <button type="button">매월</button>
         </div>
-        <ol class="board-list">
-          <li class="rank-1"><span>1</span><strong>27429</strong></li>
-          <li class="rank-2"><span>2</span><strong>24013</strong></li>
-          <li class="rank-3"><span>3</span><strong>23334</strong></li>
+        <ol class="ranking-list">
+          <li class="gold"><span>1</span><strong>27429</strong></li>
+          <li class="silver"><span>2</span><strong>24013</strong></li>
+          <li class="bronze"><span>3</span><strong>23334</strong></li>
           <li><span>4</span><strong>23030</strong></li>
           <li><span>5</span><strong>19611</strong></li>
         </ol>
@@ -44,31 +39,32 @@
 
     <section class="center-panel">
       <div class="mascot">☁️</div>
-      <div class="drop-preview" id="dropPreview">🍒</div>
-      <div class="game-wrap">
-        <canvas id="gameCanvas" width="420" height="640" aria-label="수박 게임"></canvas>
-        <div class="guide-line"></div>
+      <div class="preview-fruit" id="previewFruit">🍒</div>
+
+      <div class="board-shell">
+        <canvas id="gameCanvas" width="420" height="640"></canvas>
         <div class="overlay hidden" id="gameOverOverlay">
           <div class="overlay-card">
             <h2>게임 오버</h2>
             <p>최종 점수 <strong id="finalScore">0</strong></p>
-            <button id="restartBtn">다시 시작</button>
+            <button id="restartBtn" type="button">다시 시작</button>
           </div>
         </div>
       </div>
-      <div class="controls-card card compact">
-        <div><strong>조작:</strong> 마우스/터치로 이동 · 클릭/탭으로 떨어뜨리기</div>
-        <div><strong>R</strong> 다시 시작</div>
+
+      <div class="controls card">
+        <div>마우스/터치로 위치 이동 · 클릭/탭으로 떨어뜨리기</div>
+        <div><strong>R</strong> 다시 시작 · <strong>← →</strong> 이동 · <strong>Space</strong> 드롭</div>
       </div>
     </section>
 
-    <aside class="side right-panel">
-      <section class="next-bubble glass-bubble">
+    <aside class="panel right-panel">
+      <section class="bubble next-bubble">
         <h2>다음</h2>
-        <div id="nextFruit" class="next-fruit">🍒</div>
+        <div class="next-value" id="nextFruit">🍒</div>
       </section>
 
-      <section class="ring-card">
+      <section class="ring-box">
         <h3>신기의 고리</h3>
         <div class="fruit-ring">
           <span>🟢</span><span>🍒</span><span>🍓</span><span>🫐</span><span>🍊</span>

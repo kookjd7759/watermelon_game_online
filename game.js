@@ -1,160 +1,172 @@
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
+
 const scoreEl = document.getElementById('score');
-const bestEl = document.getElementById('bestScore');
-const nextEl = document.getElementById('nextFruit');
-const previewEl = document.getElementById('dropPreview');
-const overlay = document.getElementById('gameOverOverlay');
+const bestScoreEl = document.getElementById('bestScore');
+const nextFruitEl = document.getElementById('nextFruit');
+const previewFruitEl = document.getElementById('previewFruit');
+const overlayEl = document.getElementById('gameOverOverlay');
 const finalScoreEl = document.getElementById('finalScore');
 const restartBtn = document.getElementById('restartBtn');
 
-const W = canvas.width;
-const H = canvas.height;
-const TOP_LINE = 86;
-const GRAVITY = 0.28;
-const FRICTION = 0.995;
-const RESTITUTION = 0.15;
-const SPAWN_Y = 38;
-const DROP_COOLDOWN = 300;
+const WIDTH = canvas.width;
+const HEIGHT = canvas.height;
+const DROP_X_MIN = 20;
+const DROP_X_MAX = WIDTH - 20;
+const SPAWN_Y = 42;
+const DANGER_LINE = 92;
+const DROP_COOLDOWN = 280;
+const GRAVITY = 0.22;
+const AIR_DAMPING = 0.998;
+const BOUNCE = 0.12;
+const FLOOR_FRICTION = 0.985;
 
 const FRUITS = [
-  { name: '체리', emoji: '🍒', r: 16, color: '#ef4747', score: 1 },
-  { name: '딸기', emoji: '🍓', r: 20, color: '#ff5f87', score: 3 },
-  { name: '포도', emoji: '🫐', r: 24, color: '#6f63ff', score: 6 },
-  { name: '오렌지', emoji: '🍊', r: 29, color: '#ffae39', score: 10 },
-  { name: '사과', emoji: '🍎', r: 34, color: '#ff5b5b', score: 15 },
-  { name: '배', emoji: '🍐', r: 39, color: '#bada55', score: 21 },
-  { name: '복숭아', emoji: '🍑', r: 45, color: '#ffb0a1', score: 28 },
-  { name: '파인애플', emoji: '🍍', r: 52, color: '#ffd25a', score: 36 },
-  { name: '멜론', emoji: '🍈', r: 60, color: '#9ae26a', score: 45 },
-  { name: '수박', emoji: '🍉', r: 72, color: '#4eb45d', score: 60 },
+  { name: '체리', emoji: '🍒', radius: 16, color: '#ef4c4c', score: 1 },
+  { name: '딸기', emoji: '🍓', radius: 21, color: '#ff5d84', score: 3 },
+  { name: '포도', emoji: '🫐', radius: 27, color: '#6b63ff', score: 6 },
+  { name: '오렌지', emoji: '🍊', radius: 33, color: '#ffb347', score: 10 },
+  { name: '사과', emoji: '🍎', radius: 39, color: '#ff6666', score: 15 },
+  { name: '배', emoji: '🍐', radius: 45, color: '#b8dd60', score: 21 },
+  { name: '복숭아', emoji: '🍑', radius: 52, color: '#ffb29f', score: 28 },
+  { name: '파인애플', emoji: '🍍', radius: 60, color: '#ffd368', score: 36 },
+  { name: '멜론', emoji: '🍈', radius: 69, color: '#94df73', score: 45 },
+  { name: '수박', emoji: '🍉', radius: 80, color: '#46b55d', score: 60 },
 ];
 
 let fruits = [];
 let particles = [];
-let score = 0;
+let pointerX = WIDTH / 2;
+let nextType = getRandomStartType();
 let bestScore = Number(localStorage.getItem('watermelon-best-score') || 0);
-let pointerX = W / 2;
-let nextType = randomStartType();
+let score = 0;
 let canDrop = true;
-let lastDropTime = 0;
 let gameOver = false;
-let topDangerMs = 0;
-let lastTime = performance.now();
 let fruitId = 1;
+let topDangerFrames = 0;
+let screenShake = 0;
 
-bestEl.textContent = bestScore;
-updateNextPreview();
+bestScoreEl.textContent = bestScore;
+updatePreview();
+updatePreviewPosition();
 
-function randomStartType() {
+function getRandomStartType() {
   return Math.floor(Math.random() * 4);
 }
 
-function clamp(v, min, max) {
-  return Math.max(min, Math.min(max, v));
+function clamp(value, min, max) {
+  return Math.max(min, Math.min(max, value));
 }
 
-function updateNextPreview() {
-  nextEl.textContent = FRUITS[nextType].emoji;
-  previewEl.textContent = FRUITS[nextType].emoji;
+function updatePreview() {
+  const emoji = FRUITS[nextType].emoji;
+  nextFruitEl.textContent = emoji;
+  previewFruitEl.textContent = emoji;
 }
 
-function resizePreviewPosition() {
+function updatePreviewPosition() {
   const rect = canvas.getBoundingClientRect();
-  const x = rect.left + (pointerX / W) * rect.width;
-  previewEl.style.left = `${x}px`;
+  const left = rect.left + window.scrollX + (pointerX / WIDTH) * rect.width;
+  previewFruitEl.style.left = `${left}px`;
 }
 
-function spawnFruit(type, x, y = SPAWN_Y, dropping = true) {
+function createFruit(type, x, y = SPAWN_Y) {
   const meta = FRUITS[type];
-  fruits.push({
+  return {
     id: fruitId++,
     type,
-    x: clamp(x, meta.r + 4, W - meta.r - 4),
+    x: clamp(x, meta.radius + 2, WIDTH - meta.radius - 2),
     y,
     vx: 0,
-    vy: dropping ? 0.5 : 0,
-    r: meta.r,
-    mergedAt: 0,
-    resting: false,
-  });
+    vy: 0.2,
+    r: meta.radius,
+    remove: false,
+    mergeCooldown: 8,
+  };
 }
 
-function dropFruit() {
-  const now = performance.now();
-  if (gameOver || !canDrop || now - lastDropTime < DROP_COOLDOWN) return;
-  spawnFruit(nextType, pointerX);
-  nextType = randomStartType();
-  updateNextPreview();
-  lastDropTime = now;
+function spawnFruit() {
+  if (gameOver || !canDrop) return;
+  fruits.push(createFruit(nextType, pointerX));
+  nextType = getRandomStartType();
+  updatePreview();
   canDrop = false;
-  setTimeout(() => { canDrop = true; }, DROP_COOLDOWN);
+  setTimeout(() => {
+    canDrop = true;
+  }, DROP_COOLDOWN);
 }
 
-function addScore(v) {
-  score += v;
+function addScore(value) {
+  score += value;
   scoreEl.textContent = score;
   if (score > bestScore) {
     bestScore = score;
-    bestEl.textContent = bestScore;
+    bestScoreEl.textContent = bestScore;
     localStorage.setItem('watermelon-best-score', String(bestScore));
   }
 }
 
-function burst(x, y, color) {
-  for (let i = 0; i < 14; i++) {
-    const a = Math.random() * Math.PI * 2;
-    const s = 1 + Math.random() * 4;
-    particles.push({ x, y, vx: Math.cos(a) * s, vy: Math.sin(a) * s - 1, life: 28 + Math.random() * 18, color });
+function addBurst(x, y, color) {
+  for (let i = 0; i < 14; i += 1) {
+    const angle = Math.random() * Math.PI * 2;
+    const speed = 1 + Math.random() * 3.5;
+    particles.push({
+      x,
+      y,
+      vx: Math.cos(angle) * speed,
+      vy: Math.sin(angle) * speed - 1.4,
+      life: 24 + Math.random() * 16,
+      color,
+    });
   }
+  screenShake = 7;
 }
 
-function resolvePair(a, b, now) {
+function mergeFruits(a, b) {
+  if (a.type !== b.type || a.type >= FRUITS.length - 1) return false;
+  if (a.mergeCooldown > 0 || b.mergeCooldown > 0) return false;
+
+  a.remove = true;
+  b.remove = true;
+
+  const next = a.type + 1;
+  const merged = createFruit(next, (a.x + b.x) / 2, (a.y + b.y) / 2);
+  merged.vx = (a.vx + b.vx) * 0.25;
+  merged.vy = Math.min(a.vy, b.vy) - 1.8;
+  merged.mergeCooldown = 12;
+  fruits.push(merged);
+
+  addScore(FRUITS[next].score);
+  addBurst(merged.x, merged.y, FRUITS[next].color);
+  return true;
+}
+
+function solveCollision(a, b) {
   const dx = b.x - a.x;
   const dy = b.y - a.y;
-  const dist = Math.hypot(dx, dy) || 0.0001;
-  const minDist = a.r + b.r;
-  if (dist >= minDist) return;
+  const distance = Math.hypot(dx, dy) || 0.0001;
+  const minDistance = a.r + b.r;
 
-  if (a.type === b.type && a.type < FRUITS.length - 1 && now - a.mergedAt > 80 && now - b.mergedAt > 80) {
-    const nx = (a.x + b.x) / 2;
-    const ny = (a.y + b.y) / 2;
-    const newType = a.type + 1;
-    a.remove = true;
-    b.remove = true;
-    const nf = {
-      id: fruitId++,
-      type: newType,
-      x: nx,
-      y: ny,
-      vx: (a.vx + b.vx) * 0.2,
-      vy: Math.min(a.vy, b.vy) - 1.4,
-      r: FRUITS[newType].r,
-      mergedAt: now,
-      resting: false,
-    };
-    fruits.push(nf);
-    addScore(FRUITS[newType].score);
-    burst(nx, ny, FRUITS[newType].color);
-    return;
-  }
+  if (distance >= minDistance) return;
 
-  const overlap = minDist - dist;
-  const nx = dx / dist;
-  const ny = dy / dist;
-  const push = overlap / 2;
+  if (mergeFruits(a, b)) return;
+
+  const nx = dx / distance;
+  const ny = dy / distance;
+  const overlap = minDistance - distance;
+  const push = overlap * 0.5;
 
   a.x -= nx * push;
   a.y -= ny * push;
   b.x += nx * push;
   b.y += ny * push;
 
-  const rvx = b.vx - a.vx;
-  const rvy = b.vy - a.vy;
-  const velAlongNormal = rvx * nx + rvy * ny;
-  if (velAlongNormal > 0) return;
+  const relativeVx = b.vx - a.vx;
+  const relativeVy = b.vy - a.vy;
+  const speedAlongNormal = relativeVx * nx + relativeVy * ny;
+  if (speedAlongNormal > 0) return;
 
-  const impulse = -(1 + RESTITUTION) * velAlongNormal / 2;
+  const impulse = -(1 + BOUNCE) * speedAlongNormal * 0.5;
   const ix = impulse * nx;
   const iy = impulse * ny;
   a.vx -= ix;
@@ -163,122 +175,142 @@ function resolvePair(a, b, now) {
   b.vy += iy;
 }
 
-function update(dt, now) {
-  for (const f of fruits) {
-    f.vy += GRAVITY;
-    f.vx *= FRICTION;
-    f.vy *= 0.999;
-    f.x += f.vx * dt;
-    f.y += f.vy * dt;
+function physicsStep() {
+  for (const fruit of fruits) {
+    fruit.vy += GRAVITY;
+    fruit.vx *= AIR_DAMPING;
+    fruit.vy *= 0.999;
+    fruit.x += fruit.vx;
+    fruit.y += fruit.vy;
+    fruit.mergeCooldown = Math.max(0, fruit.mergeCooldown - 1);
 
-    if (f.x - f.r < 0) { f.x = f.r; f.vx *= -0.45; }
-    if (f.x + f.r > W) { f.x = W - f.r; f.vx *= -0.45; }
-    if (f.y + f.r > H) {
-      f.y = H - f.r;
-      f.vy *= -0.15;
-      if (Math.abs(f.vy) < 0.6) f.vy = 0;
+    if (fruit.x - fruit.r < 0) {
+      fruit.x = fruit.r;
+      fruit.vx *= -0.35;
+    }
+    if (fruit.x + fruit.r > WIDTH) {
+      fruit.x = WIDTH - fruit.r;
+      fruit.vx *= -0.35;
+    }
+    if (fruit.y + fruit.r > HEIGHT) {
+      fruit.y = HEIGHT - fruit.r;
+      fruit.vy *= -BOUNCE;
+      fruit.vx *= FLOOR_FRICTION;
+      if (Math.abs(fruit.vy) < 0.45) fruit.vy = 0;
     }
   }
 
-  for (let i = 0; i < fruits.length; i++) {
-    for (let j = i + 1; j < fruits.length; j++) {
-      resolvePair(fruits[i], fruits[j], now);
+  for (let n = 0; n < 2; n += 1) {
+    for (let i = 0; i < fruits.length; i += 1) {
+      for (let j = i + 1; j < fruits.length; j += 1) {
+        if (!fruits[i].remove && !fruits[j].remove) solveCollision(fruits[i], fruits[j]);
+      }
     }
   }
 
-  fruits = fruits.filter(f => !f.remove);
-
-  for (const p of particles) {
-    p.x += p.vx * dt;
-    p.y += p.vy * dt;
-    p.vy += 0.12;
-    p.life -= dt;
-  }
-  particles = particles.filter(p => p.life > 0);
+  fruits = fruits.filter((fruit) => !fruit.remove);
 
   let danger = false;
-  for (const f of fruits) {
-    const nearlyStill = Math.abs(f.vx) < 0.4 && Math.abs(f.vy) < 0.5;
-    if (nearlyStill && f.y - f.r < TOP_LINE) danger = true;
+  for (const fruit of fruits) {
+    const settled = Math.abs(fruit.vx) < 0.35 && Math.abs(fruit.vy) < 0.35;
+    if (settled && fruit.y - fruit.r < DANGER_LINE) {
+      danger = true;
+      break;
+    }
   }
 
-  topDangerMs = danger ? topDangerMs + 16 * dt : 0;
-  if (!gameOver && topDangerMs > 1200) triggerGameOver();
+  topDangerFrames = danger ? topDangerFrames + 1 : 0;
+  if (!gameOver && topDangerFrames > 75) {
+    triggerGameOver();
+  }
+
+  for (const particle of particles) {
+    particle.x += particle.vx;
+    particle.y += particle.vy;
+    particle.vy += 0.12;
+    particle.life -= 1;
+  }
+  particles = particles.filter((particle) => particle.life > 0);
+
+  if (screenShake > 0) screenShake *= 0.86;
 }
 
-function drawFruit(x, y, type, scale = 1) {
-  const meta = FRUITS[type];
+function drawFruit(fruit) {
+  const meta = FRUITS[fruit.type];
   ctx.save();
-  ctx.translate(x, y);
-  ctx.scale(scale, scale);
+  ctx.translate(fruit.x, fruit.y);
 
   ctx.beginPath();
   ctx.fillStyle = meta.color;
-  ctx.arc(0, 0, meta.r, 0, Math.PI * 2);
+  ctx.arc(0, 0, fruit.r, 0, Math.PI * 2);
   ctx.fill();
 
-  ctx.globalAlpha = 0.22;
+  ctx.globalAlpha = 0.25;
   ctx.beginPath();
-  ctx.fillStyle = '#fff';
-  ctx.arc(-meta.r * 0.3, -meta.r * 0.35, meta.r * 0.35, 0, Math.PI * 2);
+  ctx.fillStyle = '#ffffff';
+  ctx.arc(-fruit.r * 0.28, -fruit.r * 0.34, fruit.r * 0.34, 0, Math.PI * 2);
   ctx.fill();
   ctx.globalAlpha = 1;
 
-  ctx.font = `${meta.r * 1.15}px serif`;
+  ctx.font = `${Math.max(18, fruit.r * 1.05)}px serif`;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   ctx.fillText(meta.emoji, 0, 2);
   ctx.restore();
 }
 
-function draw() {
-  ctx.clearRect(0, 0, W, H);
+function drawBackground() {
+  ctx.fillStyle = '#ecdcb0';
+  ctx.fillRect(0, 0, WIDTH, HEIGHT);
 
-  ctx.fillStyle = '#eedfb8';
-  ctx.fillRect(0, 0, W, H);
-
-  ctx.strokeStyle = 'rgba(186, 122, 61, .38)';
-  ctx.setLineDash([8, 8]);
+  ctx.strokeStyle = 'rgba(193, 132, 66, 0.45)';
   ctx.lineWidth = 3;
+  ctx.setLineDash([8, 8]);
   ctx.beginPath();
-  ctx.moveTo(0, TOP_LINE);
-  ctx.lineTo(W, TOP_LINE);
+  ctx.moveTo(0, DANGER_LINE);
+  ctx.lineTo(WIDTH, DANGER_LINE);
   ctx.stroke();
   ctx.setLineDash([]);
 
-  if (!gameOver) {
-    ctx.globalAlpha = 0.18;
-    ctx.beginPath();
-    ctx.fillStyle = '#fff';
-    ctx.arc(pointerX, 34, FRUITS[nextType].r, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.globalAlpha = 1;
-  }
+  ctx.fillStyle = 'rgba(255,255,255,0.18)';
+  ctx.beginPath();
+  ctx.arc(pointerX, 38, FRUITS[nextType].radius, 0, Math.PI * 2);
+  ctx.fill();
+}
 
-  for (const f of fruits) drawFruit(f.x, f.y, f.type);
-
-  for (const p of particles) {
-    ctx.globalAlpha = Math.max(0, p.life / 40);
-    ctx.fillStyle = p.color;
+function drawParticles() {
+  for (const particle of particles) {
+    ctx.globalAlpha = Math.max(0, particle.life / 40);
+    ctx.fillStyle = particle.color;
     ctx.beginPath();
-    ctx.arc(p.x, p.y, 4, 0, Math.PI * 2);
+    ctx.arc(particle.x, particle.y, 3.8, 0, Math.PI * 2);
     ctx.fill();
   }
   ctx.globalAlpha = 1;
 }
 
-function loop(now) {
-  const dt = Math.min(1.5, (now - lastTime) / 16.666);
-  lastTime = now;
-  if (!gameOver) update(dt, now);
-  draw();
-  requestAnimationFrame(loop);
+function render() {
+  ctx.clearRect(0, 0, WIDTH, HEIGHT);
+  ctx.save();
+  if (screenShake > 0.3) {
+    ctx.translate((Math.random() - 0.5) * screenShake, (Math.random() - 0.5) * screenShake);
+  }
+  drawBackground();
+  for (const fruit of fruits) drawFruit(fruit);
+  drawParticles();
+  ctx.restore();
+}
+
+function frame() {
+  if (!gameOver) physicsStep();
+  render();
+  requestAnimationFrame(frame);
 }
 
 function triggerGameOver() {
   gameOver = true;
   finalScoreEl.textContent = score;
-  overlay.classList.remove('hidden');
+  overlayEl.classList.remove('hidden');
 }
 
 function resetGame() {
@@ -286,47 +318,52 @@ function resetGame() {
   particles = [];
   score = 0;
   scoreEl.textContent = '0';
-  pointerX = W / 2;
-  nextType = randomStartType();
-  updateNextPreview();
+  pointerX = WIDTH / 2;
+  nextType = getRandomStartType();
+  canDrop = true;
   gameOver = false;
-  topDangerMs = 0;
-  overlay.classList.add('hidden');
-  resizePreviewPosition();
+  topDangerFrames = 0;
+  screenShake = 0;
+  overlayEl.classList.add('hidden');
+  updatePreview();
+  updatePreviewPosition();
 }
 
-function setPointerFromClientX(clientX) {
+function setPointer(clientX) {
   const rect = canvas.getBoundingClientRect();
-  pointerX = clamp(((clientX - rect.left) / rect.width) * W, 24, W - 24);
-  resizePreviewPosition();
+  pointerX = clamp(((clientX - rect.left) / rect.width) * WIDTH, DROP_X_MIN, DROP_X_MAX);
+  updatePreviewPosition();
 }
 
-canvas.addEventListener('mousemove', e => setPointerFromClientX(e.clientX));
-canvas.addEventListener('click', () => dropFruit());
-canvas.addEventListener('touchmove', e => {
-  if (e.touches[0]) setPointerFromClientX(e.touches[0].clientX);
+canvas.addEventListener('mousemove', (event) => setPointer(event.clientX));
+canvas.addEventListener('click', spawnFruit);
+canvas.addEventListener('touchmove', (event) => {
+  if (event.touches[0]) setPointer(event.touches[0].clientX);
 }, { passive: true });
-canvas.addEventListener('touchstart', e => {
-  if (e.touches[0]) setPointerFromClientX(e.touches[0].clientX);
-  dropFruit();
+canvas.addEventListener('touchstart', (event) => {
+  if (event.touches[0]) setPointer(event.touches[0].clientX);
+  spawnFruit();
 }, { passive: true });
-window.addEventListener('keydown', e => {
-  if (e.key.toLowerCase() === 'r') resetGame();
-  if (e.key === ' ' || e.key === 'Enter') {
-    e.preventDefault();
-    dropFruit();
+
+window.addEventListener('keydown', (event) => {
+  const key = event.key.toLowerCase();
+  if (key === 'r') resetGame();
+  if (event.key === ' ' || event.key === 'Enter') {
+    event.preventDefault();
+    spawnFruit();
   }
-  if (e.key === 'ArrowLeft') {
-    pointerX = clamp(pointerX - 18, 24, W - 24);
-    resizePreviewPosition();
+  if (event.key === 'ArrowLeft') {
+    pointerX = clamp(pointerX - 18, DROP_X_MIN, DROP_X_MAX);
+    updatePreviewPosition();
   }
-  if (e.key === 'ArrowRight') {
-    pointerX = clamp(pointerX + 18, 24, W - 24);
-    resizePreviewPosition();
+  if (event.key === 'ArrowRight') {
+    pointerX = clamp(pointerX + 18, DROP_X_MIN, DROP_X_MAX);
+    updatePreviewPosition();
   }
 });
+
+window.addEventListener('resize', updatePreviewPosition);
 restartBtn.addEventListener('click', resetGame);
-window.addEventListener('resize', resizePreviewPosition);
 
 resetGame();
-requestAnimationFrame(loop);
+requestAnimationFrame(frame);
