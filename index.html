@@ -3,81 +3,91 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Watermelon Game HQ</title>
-  <meta name="description" content="GitHub Pages에서 바로 실행되는 고퀄리티 수박 게임" />
-  <link rel="stylesheet" href="./styles.css" />
+  <title>Watermelon Game</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Jua&family=Pretendard:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
-  <div class="page">
-    <aside class="panel panel-left">
-      <div class="brand">
-        <div class="brand-badge">🍉</div>
-        <div>
-          <h1>Watermelon Game HQ</h1>
-          <p>가볍고 부드럽게 돌아가도록 최적화한 브라우저 수박 게임</p>
-        </div>
-      </div>
+  <div class="topbar">
+    <div class="brand"><span class="brand-icon">🍉</span><span class="brand-text">playSuikaGame</span></div>
+  </div>
 
-      <section class="card score-card">
-        <div class="score-row">
-          <span>점수</span>
-          <strong id="score">0</strong>
-        </div>
-        <div class="score-row">
-          <span>최고 기록</span>
-          <strong id="bestScore">0</strong>
-        </div>
-        <div class="score-row">
-          <span>다음 과일</span>
-          <div id="nextFruitBadge" class="fruit-badge">🍒</div>
-        </div>
+  <main class="layout">
+    <aside class="panel left-panel">
+      <section class="bubble score-bubble">
+        <h2>스코어</h2>
+        <div class="score-value" id="score">0</div>
+        <div class="best-label">최고 점수</div>
+        <div class="best-value" id="bestScore">0</div>
       </section>
 
-      <section class="card controls-card">
-        <h2>조작법</h2>
-        <ul>
-          <li>마우스 / 터치: 위치 이동</li>
-          <li>클릭 / 탭 / 스페이스: 과일 떨어뜨리기</li>
-          <li>R: 다시 시작</li>
-          <li>P: 일시정지</li>
-        </ul>
-      </section>
-
-      <section class="card legend-card">
-        <h2>합체 순서</h2>
-        <div id="legend" class="legend"></div>
+      <section class="leaderboard-card">
+        <h3>리더보드</h3>
+        <div class="leaderboard-tabs">
+          <button class="tab active">매일</button>
+          <button class="tab">매주</button>
+          <button class="tab">매월</button>
+        </div>
+        <div class="leaderboard-list">
+          <div class="rank-row gold"><span class="medal">1</span><span class="points">27429</span></div>
+          <div class="rank-row blue"><span class="medal">2</span><span class="points">24013</span></div>
+          <div class="rank-row bronze"><span class="medal">3</span><span class="points">23334</span></div>
+          <div class="rank-row silver"><span class="medal">4</span><span class="points">23030</span></div>
+          <div class="rank-row silver"><span class="medal">5</span><span class="points">19611</span></div>
+        </div>
       </section>
     </aside>
 
-    <main class="board-wrap">
-      <div class="board-topbar">
-        <div class="pill">GitHub Pages Ready</div>
-        <div class="pill">60 FPS 지향</div>
-        <div class="pill">모바일 지원</div>
+    <section class="game-shell">
+      <div class="mascot-wrap">
+        <div class="mascot-face">☁️</div>
+        <div class="spawn-fruit" id="previewFruit">🍒</div>
       </div>
 
-      <div class="canvas-shell">
-        <canvas id="game" width="480" height="760" aria-label="수박 게임 캔버스"></canvas>
-        <div id="overlay" class="overlay hidden">
+      <div class="game-frame">
+        <canvas id="gameCanvas" width="520" height="700" aria-label="수박 게임"></canvas>
+        <div class="aim-line" id="aimLine"></div>
+        <div class="drop-indicator" id="dropIndicator"></div>
+        <div class="overlay hidden" id="gameOverOverlay">
           <div class="overlay-card">
-            <div id="overlayTitle" class="overlay-title">Game Over</div>
-            <div class="overlay-score">
-              <span>최종 점수</span>
-              <strong id="finalScore">0</strong>
-            </div>
-            <button id="restartButton" class="primary-btn">다시 시작</button>
+            <h2>게임 오버</h2>
+            <p>최종 점수 <strong id="finalScore">0</strong></p>
+            <button id="restartBtn">다시 하기</button>
           </div>
         </div>
       </div>
 
-      <div class="board-bottom">
-        <button id="dropButton" class="secondary-btn">과일 떨어뜨리기</button>
-        <button id="pauseButton" class="secondary-btn">일시정지</button>
-        <button id="resetButton" class="secondary-btn danger">리셋</button>
+      <div class="mobile-info">
+        <button id="restartFloating">다시하기</button>
       </div>
-    </main>
-  </div>
+    </section>
 
-  <script src="./game.js"></script>
+    <aside class="panel right-panel">
+      <section class="bubble next-bubble">
+        <h2>다음</h2>
+        <div class="next-fruit" id="nextFruit">🍒</div>
+      </section>
+
+      <section class="chain-card">
+        <h3>신기의 고리</h3>
+        <div class="fruit-ring">
+          <span style="--i:0">🫐</span>
+          <span style="--i:1">🥝</span>
+          <span style="--i:2">🍋</span>
+          <span style="--i:3">🍑</span>
+          <span style="--i:4">🍐</span>
+          <span style="--i:5">🍒</span>
+          <span style="--i:6">🍊</span>
+          <span style="--i:7">🫐</span>
+          <span style="--i:8">🍓</span>
+          <span style="--i:9">🍎</span>
+        </div>
+      </section>
+    </aside>
+  </main>
+
+  <script src="game.js"></script>
 </body>
 </html>
