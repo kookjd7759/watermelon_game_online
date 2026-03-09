@@ -250,43 +250,29 @@ function addBurst(x, y, color, power = 1) {
   screenShake = Math.max(screenShake, 3.8 + power * 1.6);
 }
 
-function tryQueueMerge(a, b, mergeQueue, lockedIds) {
+function mergeFruits(a, b, spawnedFruits) {
   if (a.remove || b.remove) return false;
-  if (lockedIds.has(a.id) || lockedIds.has(b.id)) return false;
   if (a.type !== b.type || a.type >= FRUITS.length - 1) return false;
   if (a.mergeCooldown > 0 || b.mergeCooldown > 0) return false;
 
-  lockedIds.add(a.id);
-  lockedIds.add(b.id);
-  mergeQueue.push({ a, b });
+  a.remove = true;
+  b.remove = true;
+
+  const next = a.type + 1;
+  const merged = createFruit(next, (a.x + b.x) / 2, (a.y + b.y) / 2);
+  merged.vx = (a.vx + b.vx) * 0.18;
+  merged.vy = Math.min(a.vy, b.vy) - lerp(0.65, 1.1, next / (FRUITS.length - 1));
+  merged.mergeCooldown = 9;
+  spawnedFruits.push(merged);
+
+  chainCount += 1;
+  chainFrames = 40;
+  addScore(FRUITS[next].score);
+  addBurst(merged.x, merged.y, FRUITS[next].color, merged.r / 30);
   return true;
 }
 
-function applyQueuedMerges(mergeQueue) {
-  for (const pair of mergeQueue) {
-    const { a, b } = pair;
-    if (a.remove || b.remove) continue;
-
-    a.remove = true;
-    b.remove = true;
-
-    const next = a.type + 1;
-    const merged = createFruit(next, (a.x + b.x) / 2, (a.y + b.y) / 2);
-    merged.vx = (a.vx + b.vx) * 0.25;
-    merged.vy = Math.min(a.vy, b.vy) - lerp(0.7, 1.2, next / (FRUITS.length - 1));
-    merged.mergeCooldown = 10;
-    fruits.push(merged);
-
-    chainCount += 1;
-    chainFrames = 40;
-    addScore(FRUITS[next].score);
-    addBurst(merged.x, merged.y, FRUITS[next].color, merged.r / 30);
-  }
-
-  updateChainUi();
-}
-
-function solveCollision(a, b, mergeQueue, lockedIds) {
+function solveCollision(a, b, spawnedFruits) {
   if (a.remove || b.remove) return;
 
   const dx = b.x - a.x;
@@ -295,7 +281,7 @@ function solveCollision(a, b, mergeQueue, lockedIds) {
   const minDist = a.r + b.r;
 
   if (dist >= minDist) return;
-  if (tryQueueMerge(a, b, mergeQueue, lockedIds)) return;
+  if (mergeFruits(a, b, spawnedFruits)) return;
 
   if (dist < 0.0001) dist = 0.0001;
   const nx = dx / dist;
@@ -399,22 +385,30 @@ function updateDangerState() {
 function physicsStep() {
   for (const fruit of fruits) integrateFruit(fruit);
 
-  const mergeQueue = [];
-  const lockedIds = new Set();
+  const spawnedFruits = [];
 
   for (let iter = 0; iter < SOLVER_ITERATIONS; iter += 1) {
     const count = fruits.length;
     for (let i = 0; i < count; i += 1) {
+      const a = fruits[i];
+      if (!a || a.remove) continue;
+
       for (let j = i + 1; j < count; j += 1) {
-        solveCollision(fruits[i], fruits[j], mergeQueue, lockedIds);
+        const b = fruits[j];
+        if (!b || b.remove) continue;
+        solveCollision(a, b, spawnedFruits);
       }
     }
+
     for (let i = 0; i < count; i += 1) {
       solveWalls(fruits[i]);
     }
   }
 
-  applyQueuedMerges(mergeQueue);
+  if (spawnedFruits.length > 0) {
+    fruits.push(...spawnedFruits);
+    updateChainUi();
+  }
 
   for (const fruit of fruits) {
     if (fruit.remove) continue;
@@ -598,10 +592,13 @@ function setPointer(clientX) {
 
 canvas.addEventListener('pointermove', (event) => setPointer(event.clientX));
 canvas.addEventListener('pointerdown', (event) => {
+  if (!event.isPrimary) return;
   if (event.pointerType === 'mouse' && event.button !== 0) return;
+  event.preventDefault();
   setPointer(event.clientX);
   spawnFruit();
 });
+canvas.addEventListener('contextmenu', (event) => event.preventDefault());
 
 window.addEventListener('keydown', (event) => {
   const key = event.key.toLowerCase();
@@ -656,4 +653,3 @@ function frame(timestamp) {
 
 resetGame();
 requestAnimationFrame(frame);
-
