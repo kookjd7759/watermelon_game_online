@@ -682,13 +682,41 @@ function setPointer(clientX) {
   updatePreviewPosition();
 }
 
+let activePointerId = null;
+
 canvas.addEventListener('pointermove', (event) => setPointer(event.clientX));
 canvas.addEventListener('pointerdown', (event) => {
   if (!event.isPrimary) return;
   if (event.pointerType === 'mouse' && event.button !== 0) return;
   event.preventDefault();
   setPointer(event.clientX);
+  activePointerId = event.pointerId;
+  if (typeof canvas.setPointerCapture === 'function') {
+    try {
+      canvas.setPointerCapture(event.pointerId);
+    } catch {
+      // Ignore capture failures.
+    }
+  }
+});
+canvas.addEventListener('pointerup', (event) => {
+  if (!event.isPrimary) return;
+  if (activePointerId !== null && event.pointerId !== activePointerId) return;
+  if (event.pointerType === 'mouse' && event.button !== 0) return;
+  event.preventDefault();
+  setPointer(event.clientX);
   spawnFruit();
+  activePointerId = null;
+  if (typeof canvas.releasePointerCapture === 'function') {
+    try {
+      canvas.releasePointerCapture(event.pointerId);
+    } catch {
+      // Ignore release failures.
+    }
+  }
+});
+canvas.addEventListener('pointercancel', () => {
+  activePointerId = null;
 });
 canvas.addEventListener('contextmenu', (event) => event.preventDefault());
 
