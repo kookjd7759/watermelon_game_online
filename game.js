@@ -21,7 +21,7 @@ const SPAWN_Y = 40;
 const GUIDE_TOP_Y = 30;
 const DANGER_LINE = 94;
 
-const GAME_SPEED = 1.1;
+const GAME_SPEED = 1.0;
 const PHYSICS_FPS = 60;
 const FIXED_STEP_MS = 1000 / PHYSICS_FPS;
 const MAX_CATCHUP_STEPS = 5;
@@ -41,10 +41,10 @@ const FLOOR_ANGULAR_DAMPING = 0.84;
 const TANGENT_SPIN_EPSILON = 0.06;
 const REST_LINEAR_EPSILON = 0.025;
 const REST_ANGULAR_EPSILON = 0.0022;
-const CONTACT_SLOP = 0.45;
-const POSITION_CORRECTION = 0.82;
+const CONTACT_SLOP = 0.1;
+const POSITION_CORRECTION = 0.95;
 const MIN_BOUNCE_SPEED = 0.55;
-const SOLVER_ITERATIONS = 5;
+const SOLVER_ITERATIONS = 8;
 
 const DROP_COOLDOWN_MS = Math.round(460 / GAME_SPEED);
 const GAME_OVER_FRAMES = 70;
@@ -343,7 +343,8 @@ function solveCollision(a, b, spawnedFruits) {
   const ny = dy / dist;
   const overlap = minDist - dist;
   const totalMass = a.mass + b.mass;
-  const penetration = Math.max(0, overlap - CONTACT_SLOP);
+  const slop = Math.max(CONTACT_SLOP, minDist * 0.006);
+  const penetration = Math.max(0, overlap - slop);
   if (penetration > 0) {
     const correction = penetration * POSITION_CORRECTION;
     const pushA = correction * (b.mass / totalMass);
