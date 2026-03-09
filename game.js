@@ -21,41 +21,43 @@ const SPAWN_Y = 40;
 const GUIDE_TOP_Y = 30;
 const DANGER_LINE = 94;
 
+const GAME_SPEED = 1.5;
 const PHYSICS_FPS = 60;
 const FIXED_STEP_MS = 1000 / PHYSICS_FPS;
 const MAX_CATCHUP_STEPS = 5;
 
-const BASE_GRAVITY = 0.2;
-const AIR_DAMPING = 0.9985;
-const FLOOR_FRICTION = 0.986;
-const SURFACE_FRICTION = 0.994;
+const BASE_GRAVITY = 0.22;
+const AIR_DAMPING = 0.9994;
+const FLOOR_FRICTION = 0.9975;
+const SURFACE_FRICTION = 0.9996;
 const WALL_BOUNCE = 0.12;
 const BODY_BOUNCE = 0.06;
+const COLLISION_FRICTION = 0.012;
 const SOLVER_ITERATIONS = 6;
 
-const DROP_COOLDOWN_MS = 430;
+const DROP_COOLDOWN_MS = Math.round(430 / GAME_SPEED);
 const GAME_OVER_FRAMES = 70;
 const START_TYPE_MAX = 4;
 const SPAWN_PROTECTION_FRAMES = 24;
 const LOW_SPEED_THRESHOLD = 0.62;
 
-const STATUS_READY = '준비 완료';
-const STATUS_COOLDOWN = '드롭 대기';
-const STATUS_DANGER = '위험';
-const STATUS_GAME_OVER = '게임 오버';
+const STATUS_READY = '\uC900\uBE44 \uC644\uB8CC';
+const STATUS_COOLDOWN = '\uB4DC\uB86D \uB300\uAE30';
+const STATUS_DANGER = '\uC704\uD5D8';
+const STATUS_GAME_OVER = '\uAC8C\uC784 \uC624\uBC84';
 
 const FRUITS = [
-  { name: '체리', emoji: '🍒', radius: 16, score: 1, color: '#ef4c4c' },
-  { name: '딸기', emoji: '🍓', radius: 22, score: 3, color: '#ff5d84' },
-  { name: '포도', emoji: '🍇', radius: 29, score: 6, color: '#7c6cff' },
-  { name: '귤', emoji: '🍊', radius: 36, score: 10, color: '#ffb347' },
-  { name: '감', emoji: '🟠', radius: 43, score: 15, color: '#ff8f4a' },
-  { name: '사과', emoji: '🍎', radius: 50, score: 21, color: '#ff6666' },
-  { name: '배', emoji: '🍐', radius: 58, score: 28, color: '#b8dd60' },
-  { name: '복숭아', emoji: '🍑', radius: 67, score: 36, color: '#ffb29f' },
-  { name: '파인애플', emoji: '🍍', radius: 77, score: 45, color: '#ffd368' },
-  { name: '멜론', emoji: '🍈', radius: 88, score: 55, color: '#94df73' },
-  { name: '수박', emoji: '🍉', radius: 100, score: 66, color: '#46b55d' },
+  { name: 'Cherry', emoji: '\u{1F352}', radius: 16, score: 1, color: '#ef4c4c' },
+  { name: 'Strawberry', emoji: '\u{1F353}', radius: 22, score: 3, color: '#ff5d84' },
+  { name: 'Grape', emoji: '\u{1F347}', radius: 29, score: 6, color: '#7c6cff' },
+  { name: 'Orange', emoji: '\u{1F34A}', radius: 36, score: 10, color: '#ffb347' },
+  { name: 'Persimmon', emoji: '\u{1F7E0}', radius: 43, score: 15, color: '#ff8f4a' },
+  { name: 'Apple', emoji: '\u{1F34E}', radius: 50, score: 21, color: '#ff6666' },
+  { name: 'Pear', emoji: '\u{1F350}', radius: 58, score: 28, color: '#b8dd60' },
+  { name: 'Peach', emoji: '\u{1F351}', radius: 67, score: 36, color: '#ffb29f' },
+  { name: 'Pineapple', emoji: '\u{1F34D}', radius: 77, score: 45, color: '#ffd368' },
+  { name: 'Melon', emoji: '\u{1F348}', radius: 88, score: 55, color: '#94df73' },
+  { name: 'Watermelon', emoji: '\u{1F349}', radius: 100, score: 66, color: '#46b55d' },
 ];
 
 let fruits = [];
@@ -312,13 +314,22 @@ function solveCollision(a, b, spawnedFruits) {
 
   const tx = -ny;
   const ty = nx;
-  const tangentSpeed = rvx * tx + rvy * ty;
-  const frictionImpulse = tangentSpeed * 0.022;
+  const rvxAfter = b.vx - a.vx;
+  const rvyAfter = b.vy - a.vy;
+  const tangentSpeed = rvxAfter * tx + rvyAfter * ty;
 
-  a.vx += (frictionImpulse * tx * b.mass) / totalMass;
-  a.vy += (frictionImpulse * ty * b.mass) / totalMass;
-  b.vx -= (frictionImpulse * tx * a.mass) / totalMass;
-  b.vy -= (frictionImpulse * ty * a.mass) / totalMass;
+  const invMassSum = (1 / a.mass) + (1 / b.mass);
+  let tangentImpulse = -tangentSpeed / invMassSum;
+  const maxFrictionImpulse = Math.abs(impulse) * COLLISION_FRICTION;
+  tangentImpulse = clamp(tangentImpulse, -maxFrictionImpulse, maxFrictionImpulse);
+
+  const fix = tangentImpulse * tx;
+  const fiy = tangentImpulse * ty;
+
+  a.vx -= fix / a.mass;
+  a.vy -= fiy / a.mass;
+  b.vx += fix / b.mass;
+  b.vy += fiy / b.mass;
 }
 
 function solveWalls(fruit) {
@@ -358,11 +369,11 @@ function updateDangerState() {
   for (const fruit of fruits) {
     if (fruit.remove) continue;
 
-    const top = fruit.y - fruit.r;
+    const centerY = fruit.y;
     const protectedFruit = frameCount - fruit.bornFrame < SPAWN_PROTECTION_FRAMES;
     const movingFast = Math.abs(fruit.vx) + Math.abs(fruit.vy) >= LOW_SPEED_THRESHOLD;
 
-    if (top < DANGER_LINE && !protectedFruit && !movingFast) {
+    if (centerY < DANGER_LINE && !protectedFruit && !movingFast) {
       isDanger = true;
       break;
     }
@@ -485,11 +496,25 @@ function drawGuideLine() {
 function drawCurrentDropShadow() {
   const fruit = FRUITS[currentType];
   ctx.save();
-  ctx.globalAlpha = 0.16;
+
+  ctx.globalAlpha = canDrop ? 0.62 : 0.38;
   ctx.beginPath();
-  ctx.fillStyle = '#ffffff';
+  ctx.fillStyle = fruit.color;
   ctx.arc(pointerX, SPAWN_Y, fruit.radius, 0, Math.PI * 2);
   ctx.fill();
+
+  ctx.globalAlpha = canDrop ? 0.82 : 0.5;
+  ctx.lineWidth = 2;
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.65)';
+  ctx.stroke();
+
+  ctx.globalAlpha = canDrop ? 0.85 : 0.55;
+  ctx.font = `${Math.max(16, fruit.radius * 0.98)}px serif`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillStyle = '#ffffff';
+  ctx.fillText(fruit.emoji, pointerX, SPAWN_Y + 2);
+
   ctx.restore();
 }
 
@@ -632,7 +657,7 @@ function frame(timestamp) {
   lastFrameTime = timestamp;
 
   if (!gameOver) {
-    accumulator += delta;
+    accumulator += delta * GAME_SPEED;
     let steps = 0;
 
     while (accumulator >= FIXED_STEP_MS && steps < MAX_CATCHUP_STEPS) {
