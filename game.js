@@ -683,41 +683,40 @@ function setPointer(clientX) {
 }
 
 let activePointerId = null;
+let pointerIsDown = false;
 
-canvas.addEventListener('pointermove', (event) => setPointer(event.clientX));
-canvas.addEventListener('pointerdown', (event) => {
+function handlePointerDown(event) {
   if (!event.isPrimary) return;
   if (event.pointerType === 'mouse' && event.button !== 0) return;
   event.preventDefault();
   setPointer(event.clientX);
   activePointerId = event.pointerId;
-  if (typeof canvas.setPointerCapture === 'function') {
-    try {
-      canvas.setPointerCapture(event.pointerId);
-    } catch {
-      // Ignore capture failures.
-    }
-  }
-});
-canvas.addEventListener('pointerup', (event) => {
+  pointerIsDown = true;
+}
+
+function handlePointerUp(event) {
   if (!event.isPrimary) return;
+  if (!pointerIsDown) return;
   if (activePointerId !== null && event.pointerId !== activePointerId) return;
   if (event.pointerType === 'mouse' && event.button !== 0) return;
   event.preventDefault();
   setPointer(event.clientX);
   spawnFruit();
+  pointerIsDown = false;
   activePointerId = null;
-  if (typeof canvas.releasePointerCapture === 'function') {
-    try {
-      canvas.releasePointerCapture(event.pointerId);
-    } catch {
-      // Ignore release failures.
-    }
-  }
-});
-canvas.addEventListener('pointercancel', () => {
+}
+
+function clearPointerState() {
+  pointerIsDown = false;
   activePointerId = null;
-});
+}
+
+canvas.addEventListener('pointermove', (event) => setPointer(event.clientX));
+canvas.addEventListener('pointerdown', handlePointerDown);
+canvas.addEventListener('pointerup', handlePointerUp);
+window.addEventListener('pointerup', handlePointerUp);
+window.addEventListener('pointercancel', clearPointerState);
+canvas.addEventListener('pointercancel', clearPointerState);
 canvas.addEventListener('contextmenu', (event) => event.preventDefault());
 
 window.addEventListener('keydown', (event) => {
