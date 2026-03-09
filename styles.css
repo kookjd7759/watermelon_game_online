@@ -195,6 +195,7 @@ body {
 }
 
 #gameCanvas {
+  touch-action: none;
   display: block;
   width: 100%;
   height: auto;
@@ -342,3 +343,4 @@ body {
   .score-value { font-size: 48px; }
   .controls-top, .controls-bottom { justify-content: center; }
 }
+

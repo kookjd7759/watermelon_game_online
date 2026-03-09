@@ -17,43 +17,51 @@ const comboEl = document.getElementById('comboValue');
 const WIDTH = canvas.width;
 const HEIGHT = canvas.height;
 const WALL = 12;
-const DROP_MARGIN = 20;
-const DROP_X_MIN = WALL + DROP_MARGIN;
-const DROP_X_MAX = WIDTH - WALL - DROP_MARGIN;
-const SPAWN_Y = 36;
+const SPAWN_Y = 40;
 const GUIDE_TOP_Y = 30;
-const DANGER_LINE = 92;
-const BASE_GRAVITY = 0.17;
-const AIR_DAMPING = 0.998;
-const FLOOR_FRICTION = 0.985;
-const SURFACE_FRICTION = 0.992;
-const WALL_BOUNCE = 0.16;
-const BODY_BOUNCE = 0.1;
-const DROP_COOLDOWN = 280;
-const SOLVER_ITERATIONS = 5;
-const GAME_OVER_FRAMES = 50;
+const DANGER_LINE = 94;
+
+const PHYSICS_FPS = 60;
+const FIXED_STEP_MS = 1000 / PHYSICS_FPS;
+const MAX_CATCHUP_STEPS = 5;
+
+const BASE_GRAVITY = 0.2;
+const AIR_DAMPING = 0.9985;
+const FLOOR_FRICTION = 0.986;
+const SURFACE_FRICTION = 0.994;
+const WALL_BOUNCE = 0.12;
+const BODY_BOUNCE = 0.06;
+const SOLVER_ITERATIONS = 6;
+
+const DROP_COOLDOWN_MS = 430;
+const GAME_OVER_FRAMES = 70;
 const START_TYPE_MAX = 4;
-const SPAWN_PROTECTION_MS = 650;
+const SPAWN_PROTECTION_FRAMES = 24;
+const LOW_SPEED_THRESHOLD = 0.62;
+
+const STATUS_READY = '준비 완료';
+const STATUS_COOLDOWN = '드롭 대기';
+const STATUS_DANGER = '위험';
+const STATUS_GAME_OVER = '게임 오버';
 
 const FRUITS = [
-  { name: '체리', emoji: '🍒', radius: 15, score: 1, color: '#ef4c4c' },
-  { name: '딸기', emoji: '🍓', radius: 21, score: 3, color: '#ff5d84' },
-  { name: '포도', emoji: '🫐', radius: 27, score: 6, color: '#6b63ff' },
-  { name: '오렌지', emoji: '🍊', radius: 33, score: 10, color: '#ffb347' },
-  { name: '사과', emoji: '🍎', radius: 39, score: 15, color: '#ff6666' },
-  { name: '배', emoji: '🍐', radius: 45, score: 21, color: '#b8dd60' },
-  { name: '복숭아', emoji: '🍑', radius: 53, score: 28, color: '#ffb29f' },
-  { name: '파인애플', emoji: '🍍', radius: 61, score: 36, color: '#ffd368' },
-  { name: '멜론', emoji: '🍈', radius: 71, score: 45, color: '#94df73' },
-  { name: '수박', emoji: '🍉', radius: 82, score: 60, color: '#46b55d' },
+  { name: '체리', emoji: '🍒', radius: 16, score: 1, color: '#ef4c4c' },
+  { name: '딸기', emoji: '🍓', radius: 22, score: 3, color: '#ff5d84' },
+  { name: '포도', emoji: '🍇', radius: 29, score: 6, color: '#7c6cff' },
+  { name: '귤', emoji: '🍊', radius: 36, score: 10, color: '#ffb347' },
+  { name: '감', emoji: '🟠', radius: 43, score: 15, color: '#ff8f4a' },
+  { name: '사과', emoji: '🍎', radius: 50, score: 21, color: '#ff6666' },
+  { name: '배', emoji: '🍐', radius: 58, score: 28, color: '#b8dd60' },
+  { name: '복숭아', emoji: '🍑', radius: 67, score: 36, color: '#ffb29f' },
+  { name: '파인애플', emoji: '🍍', radius: 77, score: 45, color: '#ffd368' },
+  { name: '멜론', emoji: '🍈', radius: 88, score: 55, color: '#94df73' },
+  { name: '수박', emoji: '🍉', radius: 100, score: 66, color: '#46b55d' },
 ];
 
 let fruits = [];
 let particles = [];
 let score = 0;
-let bestScore = Number(localStorage.getItem('watermelon-best-score') || 0);
-let combo = 0;
-let comboFrames = 0;
+let bestScore = readBestScore();
 let pointerX = WIDTH / 2;
 let currentType = 0;
 let nextType = 1;
@@ -63,8 +71,29 @@ let dangerFrames = 0;
 let fruitId = 1;
 let screenShake = 0;
 let frameCount = 0;
+let cooldownTimerId = null;
+let chainCount = 0;
+let chainFrames = 0;
+let lastFrameTime = 0;
+let accumulator = 0;
 
 bestScoreEl.textContent = String(bestScore);
+
+function readBestScore() {
+  try {
+    return Number(localStorage.getItem('watermelon-best-score') || 0);
+  } catch {
+    return 0;
+  }
+}
+
+function saveBestScore(value) {
+  try {
+    localStorage.setItem('watermelon-best-score', String(value));
+  } catch {
+    // Ignore storage failures (private mode, blocked storage).
+  }
+}
 
 function randomStartType() {
   return Math.floor(Math.random() * (START_TYPE_MAX + 1));
@@ -79,12 +108,45 @@ function lerp(a, b, t) {
 }
 
 function getMass(type) {
-  const r = FRUITS[type].radius;
-  return Math.pow(r / 17, 2.55);
+  return Math.pow(FRUITS[type].radius / 16, 2.4);
 }
 
 function getGravityScale(type) {
-  return lerp(0.82, 1.28, type / (FRUITS.length - 1));
+  return lerp(0.84, 1.26, type / (FRUITS.length - 1));
+}
+
+function getDropBounds(type) {
+  const radius = FRUITS[type].radius;
+  return {
+    min: WALL + radius,
+    max: WIDTH - WALL - radius,
+  };
+}
+
+function syncPointerToCurrentType() {
+  const { min, max } = getDropBounds(currentType);
+  pointerX = clamp(pointerX, min, max);
+}
+
+function clearDropCooldown() {
+  if (cooldownTimerId !== null) {
+    clearTimeout(cooldownTimerId);
+    cooldownTimerId = null;
+  }
+}
+
+function startDropCooldown() {
+  clearDropCooldown();
+  canDrop = false;
+  setBadge(STATUS_COOLDOWN);
+
+  cooldownTimerId = setTimeout(() => {
+    cooldownTimerId = null;
+    if (!gameOver) {
+      canDrop = true;
+      setBadge(dangerFrames > 0 ? STATUS_DANGER : STATUS_READY, dangerFrames > 0);
+    }
+  }, DROP_COOLDOWN_MS);
 }
 
 function getGuideAlpha() {
@@ -104,9 +166,9 @@ function updateDangerMeter() {
   dangerFillEl.style.transform = `scaleX(${ratio})`;
 }
 
-function updateComboUi() {
+function updateChainUi() {
   if (!comboEl) return;
-  comboEl.textContent = combo > 1 ? `${combo} COMBO` : 'READY';
+  comboEl.textContent = chainFrames > 0 && chainCount > 1 ? `CHAIN x${chainCount}` : 'READY';
 }
 
 function updatePreview() {
@@ -124,18 +186,18 @@ function updatePreviewPosition() {
 }
 
 function createFruit(type, x, y = SPAWN_Y) {
-  const meta = FRUITS[type];
+  const bounds = getDropBounds(type);
   return {
     id: fruitId++,
     type,
-    x: clamp(x, WALL + meta.radius, WIDTH - WALL - meta.radius),
+    x: clamp(x, bounds.min, bounds.max),
     y,
     vx: 0,
-    vy: 0.1,
-    r: meta.radius,
+    vy: 0,
+    r: FRUITS[type].radius,
     mass: getMass(type),
     gravityScale: getGravityScale(type),
-    bornAt: performance.now(),
+    bornFrame: frameCount,
     mergeCooldown: 8,
     remove: false,
   };
@@ -144,23 +206,20 @@ function createFruit(type, x, y = SPAWN_Y) {
 function spawnFruit() {
   if (gameOver || !canDrop) return;
 
+  syncPointerToCurrentType();
   const fruit = createFruit(currentType, pointerX, SPAWN_Y);
   fruits.push(fruit);
 
   currentType = nextType;
   nextType = randomStartType();
+  syncPointerToCurrentType();
   updatePreview();
-  combo = 0;
-  updateComboUi();
+  updatePreviewPosition();
 
-  canDrop = false;
-  setBadge('드롭 중');
-  setTimeout(() => {
-    if (!gameOver) {
-      canDrop = true;
-      setBadge('준비 완료');
-    }
-  }, DROP_COOLDOWN);
+  chainCount = 0;
+  chainFrames = 0;
+  updateChainUi();
+  startDropCooldown();
 }
 
 function addScore(value) {
@@ -169,57 +228,74 @@ function addScore(value) {
   if (score > bestScore) {
     bestScore = score;
     bestScoreEl.textContent = String(bestScore);
-    localStorage.setItem('watermelon-best-score', String(bestScore));
+    saveBestScore(bestScore);
   }
 }
 
 function addBurst(x, y, color, power = 1) {
-  const count = 12 + Math.round(power * 6);
+  const count = 11 + Math.round(power * 5);
   for (let i = 0; i < count; i += 1) {
     const angle = Math.random() * Math.PI * 2;
-    const speed = 1 + Math.random() * (2.8 + power * 1.2);
+    const speed = 0.8 + Math.random() * (2.1 + power);
     particles.push({
       x,
       y,
       vx: Math.cos(angle) * speed,
-      vy: Math.sin(angle) * speed - 0.9,
-      life: 24 + Math.random() * 18,
+      vy: Math.sin(angle) * speed - 0.75,
+      life: 20 + Math.random() * 16,
       color,
-      size: 2.4 + Math.random() * 2.4,
+      size: 2 + Math.random() * 2.2,
     });
   }
-  screenShake = Math.max(screenShake, 5 + power * 2.2);
+  screenShake = Math.max(screenShake, 3.8 + power * 1.6);
 }
 
-function mergeFruits(a, b) {
+function tryQueueMerge(a, b, mergeQueue, lockedIds) {
+  if (a.remove || b.remove) return false;
+  if (lockedIds.has(a.id) || lockedIds.has(b.id)) return false;
   if (a.type !== b.type || a.type >= FRUITS.length - 1) return false;
   if (a.mergeCooldown > 0 || b.mergeCooldown > 0) return false;
 
-  a.remove = true;
-  b.remove = true;
-
-  const next = a.type + 1;
-  const merged = createFruit(next, (a.x + b.x) / 2, (a.y + b.y) / 2);
-  merged.vx = (a.vx + b.vx) * 0.2;
-  merged.vy = Math.min(a.vy, b.vy) - lerp(1.2, 2.1, next / (FRUITS.length - 1));
-  merged.mergeCooldown = 12;
-  fruits.push(merged);
-
-  combo += 1;
-  comboFrames = 40;
-  updateComboUi();
-  addScore(FRUITS[next].score + Math.max(0, combo - 1));
-  addBurst(merged.x, merged.y, FRUITS[next].color, merged.r / 25);
+  lockedIds.add(a.id);
+  lockedIds.add(b.id);
+  mergeQueue.push({ a, b });
   return true;
 }
 
-function solveCollision(a, b) {
+function applyQueuedMerges(mergeQueue) {
+  for (const pair of mergeQueue) {
+    const { a, b } = pair;
+    if (a.remove || b.remove) continue;
+
+    a.remove = true;
+    b.remove = true;
+
+    const next = a.type + 1;
+    const merged = createFruit(next, (a.x + b.x) / 2, (a.y + b.y) / 2);
+    merged.vx = (a.vx + b.vx) * 0.25;
+    merged.vy = Math.min(a.vy, b.vy) - lerp(0.7, 1.2, next / (FRUITS.length - 1));
+    merged.mergeCooldown = 10;
+    fruits.push(merged);
+
+    chainCount += 1;
+    chainFrames = 40;
+    addScore(FRUITS[next].score);
+    addBurst(merged.x, merged.y, FRUITS[next].color, merged.r / 30);
+  }
+
+  updateChainUi();
+}
+
+function solveCollision(a, b, mergeQueue, lockedIds) {
+  if (a.remove || b.remove) return;
+
   const dx = b.x - a.x;
   const dy = b.y - a.y;
   let dist = Math.hypot(dx, dy);
   const minDist = a.r + b.r;
+
   if (dist >= minDist) return;
-  if (mergeFruits(a, b)) return;
+  if (tryQueueMerge(a, b, mergeQueue, lockedIds)) return;
 
   if (dist < 0.0001) dist = 0.0001;
   const nx = dx / dist;
@@ -239,8 +315,7 @@ function solveCollision(a, b) {
   const speedNormal = rvx * nx + rvy * ny;
   if (speedNormal > 0) return;
 
-  const restitution = BODY_BOUNCE;
-  const impulse = -((1 + restitution) * speedNormal) / ((1 / a.mass) + (1 / b.mass));
+  const impulse = -((1 + BODY_BOUNCE) * speedNormal) / ((1 / a.mass) + (1 / b.mass));
   const ix = impulse * nx;
   const iy = impulse * ny;
 
@@ -252,7 +327,7 @@ function solveCollision(a, b) {
   const tx = -ny;
   const ty = nx;
   const tangentSpeed = rvx * tx + rvy * ty;
-  const frictionImpulse = tangentSpeed * 0.028;
+  const frictionImpulse = tangentSpeed * 0.022;
 
   a.vx += (frictionImpulse * tx * b.mass) / totalMass;
   a.vy += (frictionImpulse * ty * b.mass) / totalMass;
@@ -261,6 +336,8 @@ function solveCollision(a, b) {
 }
 
 function solveWalls(fruit) {
+  if (fruit.remove) return;
+
   if (fruit.x - fruit.r < WALL) {
     fruit.x = WALL + fruit.r;
     fruit.vx = Math.abs(fruit.vx) * WALL_BOUNCE;
@@ -271,13 +348,16 @@ function solveWalls(fruit) {
   }
   if (fruit.y + fruit.r > HEIGHT) {
     fruit.y = HEIGHT - fruit.r;
-    fruit.vy = -Math.abs(fruit.vy) * 0.08;
+    if (fruit.vy > 0) {
+      fruit.vy = -fruit.vy * 0.06;
+    }
     fruit.vx *= FLOOR_FRICTION;
-    if (Math.abs(fruit.vy) < 0.18) fruit.vy = 0;
+    if (Math.abs(fruit.vy) < 0.11) fruit.vy = 0;
   }
 }
 
 function integrateFruit(fruit) {
+  if (fruit.remove) return;
   fruit.vy += BASE_GRAVITY * fruit.gravityScale;
   fruit.vx *= AIR_DAMPING;
   fruit.x += fruit.vx;
@@ -287,13 +367,14 @@ function integrateFruit(fruit) {
 }
 
 function updateDangerState() {
-  const now = performance.now();
   let isDanger = false;
 
   for (const fruit of fruits) {
+    if (fruit.remove) continue;
+
     const top = fruit.y - fruit.r;
-    const protectedFruit = now - fruit.bornAt < SPAWN_PROTECTION_MS;
-    const movingFast = Math.abs(fruit.vx) + Math.abs(fruit.vy) > 1.35;
+    const protectedFruit = frameCount - fruit.bornFrame < SPAWN_PROTECTION_FRAMES;
+    const movingFast = Math.abs(fruit.vx) + Math.abs(fruit.vy) >= LOW_SPEED_THRESHOLD;
 
     if (top < DANGER_LINE && !protectedFruit && !movingFast) {
       isDanger = true;
@@ -305,9 +386,9 @@ function updateDangerState() {
   updateDangerMeter();
 
   if (isDanger) {
-    setBadge('위험', true);
+    setBadge(STATUS_DANGER, true);
   } else if (!gameOver) {
-    setBadge(canDrop ? '준비 완료' : '드롭 중');
+    setBadge(canDrop ? STATUS_READY : STATUS_COOLDOWN, false);
   }
 
   if (!gameOver && dangerFrames >= GAME_OVER_FRAMES) {
@@ -318,17 +399,28 @@ function updateDangerState() {
 function physicsStep() {
   for (const fruit of fruits) integrateFruit(fruit);
 
+  const mergeQueue = [];
+  const lockedIds = new Set();
+
   for (let iter = 0; iter < SOLVER_ITERATIONS; iter += 1) {
-    for (let i = 0; i < fruits.length; i += 1) {
-      for (let j = i + 1; j < fruits.length; j += 1) {
-        solveCollision(fruits[i], fruits[j]);
+    const count = fruits.length;
+    for (let i = 0; i < count; i += 1) {
+      for (let j = i + 1; j < count; j += 1) {
+        solveCollision(fruits[i], fruits[j], mergeQueue, lockedIds);
       }
     }
-    for (const fruit of fruits) solveWalls(fruit);
+    for (let i = 0; i < count; i += 1) {
+      solveWalls(fruits[i]);
+    }
   }
 
+  applyQueuedMerges(mergeQueue);
+
   for (const fruit of fruits) {
-    if (fruit.y + fruit.r >= HEIGHT - 0.5) fruit.vx *= SURFACE_FRICTION;
+    if (fruit.remove) continue;
+    if (fruit.y + fruit.r >= HEIGHT - 0.5) {
+      fruit.vx *= SURFACE_FRICTION;
+    }
     if (Math.abs(fruit.vx) < 0.01) fruit.vx = 0;
     if (Math.abs(fruit.vy) < 0.01) fruit.vy = 0;
   }
@@ -339,18 +431,20 @@ function physicsStep() {
   for (const particle of particles) {
     particle.x += particle.vx;
     particle.y += particle.vy;
-    particle.vy += 0.09;
+    particle.vy += 0.085;
     particle.life -= 1;
   }
   particles = particles.filter((particle) => particle.life > 0);
 
-  if (comboFrames > 0) comboFrames -= 1;
-  else if (combo > 0) {
-    combo = 0;
-    updateComboUi();
+  if (chainFrames > 0) {
+    chainFrames -= 1;
+    if (chainFrames === 0) {
+      chainCount = 0;
+      updateChainUi();
+    }
   }
 
-  if (screenShake > 0.25) screenShake *= 0.85;
+  if (screenShake > 0.2) screenShake *= 0.86;
   else screenShake = 0;
 }
 
@@ -371,7 +465,7 @@ function drawFruit(fruit) {
   ctx.fill();
   ctx.globalAlpha = 1;
 
-  ctx.font = `${Math.max(18, fruit.r * 1.02)}px serif`;
+  ctx.font = `${Math.max(16, fruit.r * 0.98)}px serif`;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   ctx.fillText(meta.emoji, 0, 2);
@@ -385,8 +479,8 @@ function drawGuideLine() {
   ctx.moveTo(pointerX, GUIDE_TOP_Y);
   ctx.lineTo(pointerX, HEIGHT - 30);
   const gradient = ctx.createLinearGradient(pointerX, GUIDE_TOP_Y, pointerX, HEIGHT - 30);
-  gradient.addColorStop(0, `rgba(255,255,255,${0.75 * alpha})`);
-  gradient.addColorStop(0.55, `rgba(255,255,255,${0.3 * alpha})`);
+  gradient.addColorStop(0, `rgba(255,255,255,${0.72 * alpha})`);
+  gradient.addColorStop(0.55, `rgba(255,255,255,${0.28 * alpha})`);
   gradient.addColorStop(1, 'rgba(255,255,255,0)');
   ctx.strokeStyle = gradient;
   ctx.lineWidth = 2;
@@ -397,7 +491,7 @@ function drawGuideLine() {
 function drawCurrentDropShadow() {
   const fruit = FRUITS[currentType];
   ctx.save();
-  ctx.globalAlpha = 0.17;
+  ctx.globalAlpha = 0.16;
   ctx.beginPath();
   ctx.fillStyle = '#ffffff';
   ctx.arc(pointerX, SPAWN_Y, fruit.radius, 0, Math.PI * 2);
@@ -407,8 +501,8 @@ function drawCurrentDropShadow() {
 
 function drawBackground() {
   const background = ctx.createLinearGradient(0, 0, 0, HEIGHT);
-  background.addColorStop(0, '#e8d9aa');
-  background.addColorStop(1, '#e7d3a0');
+  background.addColorStop(0, '#ead9a8');
+  background.addColorStop(1, '#e6cf95');
   ctx.fillStyle = background;
   ctx.fillRect(0, 0, WIDTH, HEIGHT);
 
@@ -430,7 +524,7 @@ function drawBackground() {
 
 function drawParticles() {
   for (const particle of particles) {
-    ctx.globalAlpha = Math.max(0, particle.life / 40);
+    ctx.globalAlpha = Math.max(0, particle.life / 36);
     ctx.fillStyle = particle.color;
     ctx.beginPath();
     ctx.arc(particle.x, particle.y, particle.size, 0, Math.PI * 2);
@@ -455,19 +549,19 @@ function render() {
 
 function triggerGameOver() {
   gameOver = true;
+  clearDropCooldown();
   canDrop = false;
-  setBadge('게임 오버', true);
+  setBadge(STATUS_GAME_OVER, true);
   finalScoreEl.textContent = String(score);
   overlayEl.classList.remove('hidden');
 }
 
 function resetGame() {
+  clearDropCooldown();
+
   fruits = [];
   particles = [];
   score = 0;
-  combo = 0;
-  comboFrames = 0;
-  scoreEl.textContent = '0';
   pointerX = WIDTH / 2;
   currentType = randomStartType();
   nextType = randomStartType();
@@ -476,43 +570,58 @@ function resetGame() {
   dangerFrames = 0;
   fruitId = 1;
   screenShake = 0;
+  frameCount = 0;
+  chainCount = 0;
+  chainFrames = 0;
+  accumulator = 0;
+  lastFrameTime = 0;
+
+  scoreEl.textContent = '0';
   overlayEl.classList.add('hidden');
+  syncPointerToCurrentType();
   updatePreview();
   updatePreviewPosition();
   updateDangerMeter();
-  updateComboUi();
-  setBadge('준비 완료');
+  updateChainUi();
+  setBadge(STATUS_READY);
 }
 
 function setPointer(clientX) {
   const rect = canvas.getBoundingClientRect();
-  pointerX = clamp(((clientX - rect.left) / rect.width) * WIDTH, DROP_X_MIN, DROP_X_MAX);
+  if (rect.width === 0) return;
+
+  const nextX = ((clientX - rect.left) / rect.width) * WIDTH;
+  const { min, max } = getDropBounds(currentType);
+  pointerX = clamp(nextX, min, max);
   updatePreviewPosition();
 }
 
-canvas.addEventListener('mousemove', (event) => setPointer(event.clientX));
-canvas.addEventListener('click', spawnFruit);
-canvas.addEventListener('touchmove', (event) => {
-  if (event.touches[0]) setPointer(event.touches[0].clientX);
-}, { passive: true });
-canvas.addEventListener('touchstart', (event) => {
-  if (event.touches[0]) setPointer(event.touches[0].clientX);
+canvas.addEventListener('pointermove', (event) => setPointer(event.clientX));
+canvas.addEventListener('pointerdown', (event) => {
+  if (event.pointerType === 'mouse' && event.button !== 0) return;
+  setPointer(event.clientX);
   spawnFruit();
-}, { passive: true });
+});
 
 window.addEventListener('keydown', (event) => {
   const key = event.key.toLowerCase();
-  if (key === 'r') resetGame();
-  if (event.key === ' ' || event.key === 'Enter') {
+  if (key === 'r') {
+    resetGame();
+    return;
+  }
+
+  if (!event.repeat && (event.code === 'Space' || event.key === 'Enter')) {
     event.preventDefault();
     spawnFruit();
+    return;
   }
+
+  const { min, max } = getDropBounds(currentType);
   if (event.key === 'ArrowLeft') {
-    pointerX = clamp(pointerX - 16, DROP_X_MIN, DROP_X_MAX);
+    pointerX = clamp(pointerX - 16, min, max);
     updatePreviewPosition();
-  }
-  if (event.key === 'ArrowRight') {
-    pointerX = clamp(pointerX + 16, DROP_X_MIN, DROP_X_MAX);
+  } else if (event.key === 'ArrowRight') {
+    pointerX = clamp(pointerX + 16, min, max);
     updatePreviewPosition();
   }
 });
@@ -520,12 +629,31 @@ window.addEventListener('keydown', (event) => {
 window.addEventListener('resize', updatePreviewPosition);
 restartBtn.addEventListener('click', resetGame);
 
-function frame() {
-  frameCount += 1;
-  if (!gameOver) physicsStep();
+function frame(timestamp) {
+  if (!lastFrameTime) lastFrameTime = timestamp;
+  const delta = Math.min(64, timestamp - lastFrameTime);
+  lastFrameTime = timestamp;
+
+  if (!gameOver) {
+    accumulator += delta;
+    let steps = 0;
+
+    while (accumulator >= FIXED_STEP_MS && steps < MAX_CATCHUP_STEPS) {
+      frameCount += 1;
+      physicsStep();
+      accumulator -= FIXED_STEP_MS;
+      steps += 1;
+    }
+
+    if (steps === MAX_CATCHUP_STEPS) {
+      accumulator = 0;
+    }
+  }
+
   render();
   requestAnimationFrame(frame);
 }
 
 resetGame();
 requestAnimationFrame(frame);
+
