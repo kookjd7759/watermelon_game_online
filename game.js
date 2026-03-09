@@ -21,25 +21,32 @@ const SPAWN_Y = 40;
 const GUIDE_TOP_Y = 30;
 const DANGER_LINE = 94;
 
-const GAME_SPEED = 1.5;
+const GAME_SPEED = 1.1;
 const PHYSICS_FPS = 60;
 const FIXED_STEP_MS = 1000 / PHYSICS_FPS;
 const MAX_CATCHUP_STEPS = 5;
 
-const BASE_GRAVITY = 0.22;
-const AIR_DAMPING = 0.9994;
-const FLOOR_FRICTION = 0.9975;
-const SURFACE_FRICTION = 0.9996;
-const WALL_BOUNCE = 0.12;
-const BODY_BOUNCE = 0.06;
-const COLLISION_FRICTION = 0.012;
-const SPIN_TRANSFER = 0.92;
-const ANGULAR_DAMPING = 0.996;
-const MAX_ANGULAR_SPEED = 0.34;
-const ROLLING_GRIP = 0.055;
-const SOLVER_ITERATIONS = 6;
+const BASE_GRAVITY = 0.225;
+const AIR_DAMPING = 0.9992;
+const FLOOR_FRICTION = 0.9962;
+const SURFACE_FRICTION = 0.999;
+const WALL_BOUNCE = 0.08;
+const BODY_BOUNCE = 0.035;
+const COLLISION_FRICTION = 0.0075;
+const SPIN_TRANSFER = 0.42;
+const ANGULAR_DAMPING = 0.9945;
+const MAX_ANGULAR_SPEED = 0.26;
+const ROLLING_GRIP = 0.035;
+const FLOOR_ANGULAR_DAMPING = 0.84;
+const TANGENT_SPIN_EPSILON = 0.06;
+const REST_LINEAR_EPSILON = 0.025;
+const REST_ANGULAR_EPSILON = 0.0022;
+const CONTACT_SLOP = 0.45;
+const POSITION_CORRECTION = 0.82;
+const MIN_BOUNCE_SPEED = 0.55;
+const SOLVER_ITERATIONS = 5;
 
-const DROP_COOLDOWN_MS = Math.round(430 / GAME_SPEED);
+const DROP_COOLDOWN_MS = Math.round(460 / GAME_SPEED);
 const GAME_OVER_FRAMES = 70;
 const START_TYPE_MAX = 4;
 const SPAWN_PROTECTION_FRAMES = 24;
@@ -336,20 +343,25 @@ function solveCollision(a, b, spawnedFruits) {
   const ny = dy / dist;
   const overlap = minDist - dist;
   const totalMass = a.mass + b.mass;
-  const pushA = overlap * (b.mass / totalMass);
-  const pushB = overlap * (a.mass / totalMass);
+  const penetration = Math.max(0, overlap - CONTACT_SLOP);
+  if (penetration > 0) {
+    const correction = penetration * POSITION_CORRECTION;
+    const pushA = correction * (b.mass / totalMass);
+    const pushB = correction * (a.mass / totalMass);
 
-  a.x -= nx * pushA;
-  a.y -= ny * pushA;
-  b.x += nx * pushB;
-  b.y += ny * pushB;
+    a.x -= nx * pushA;
+    a.y -= ny * pushA;
+    b.x += nx * pushB;
+    b.y += ny * pushB;
+  }
 
   const rvx = b.vx - a.vx;
   const rvy = b.vy - a.vy;
   const speedNormal = rvx * nx + rvy * ny;
   if (speedNormal > 0) return;
 
-  const impulse = -((1 + BODY_BOUNCE) * speedNormal) / ((1 / a.mass) + (1 / b.mass));
+  const restitution = Math.abs(speedNormal) > MIN_BOUNCE_SPEED ? BODY_BOUNCE : 0;
+  const impulse = -((1 + restitution) * speedNormal) / ((1 / a.mass) + (1 / b.mass));
   const ix = impulse * nx;
   const iy = impulse * ny;
 
@@ -365,22 +377,27 @@ function solveCollision(a, b, spawnedFruits) {
   const tangentSpeed = rvxAfter * tx + rvyAfter * ty;
 
   const invMassSum = (1 / a.mass) + (1 / b.mass);
-  let tangentImpulse = -tangentSpeed / invMassSum;
-  const maxFrictionImpulse = Math.abs(impulse) * COLLISION_FRICTION;
-  tangentImpulse = clamp(tangentImpulse, -maxFrictionImpulse, maxFrictionImpulse);
+  let tangentImpulse = 0;
+  if (Math.abs(tangentSpeed) > TANGENT_SPIN_EPSILON) {
+    tangentImpulse = -tangentSpeed / invMassSum;
+    const maxFrictionImpulse = Math.abs(impulse) * COLLISION_FRICTION;
+    tangentImpulse = clamp(tangentImpulse, -maxFrictionImpulse, maxFrictionImpulse);
+  }
 
-  const fix = tangentImpulse * tx;
-  const fiy = tangentImpulse * ty;
+  if (Math.abs(tangentImpulse) > 0.00001) {
+    const fix = tangentImpulse * tx;
+    const fiy = tangentImpulse * ty;
 
-  a.vx -= fix / a.mass;
-  a.vy -= fiy / a.mass;
-  b.vx += fix / b.mass;
-  b.vy += fiy / b.mass;
+    a.vx -= fix / a.mass;
+    a.vy -= fiy / a.mass;
+    b.vx += fix / b.mass;
+    b.vy += fiy / b.mass;
 
-  const spinA = (2 * tangentImpulse) / (a.mass * Math.max(8, a.r));
-  const spinB = (2 * tangentImpulse) / (b.mass * Math.max(8, b.r));
-  a.av = clamp(a.av - spinA * SPIN_TRANSFER, -MAX_ANGULAR_SPEED, MAX_ANGULAR_SPEED);
-  b.av = clamp(b.av + spinB * SPIN_TRANSFER, -MAX_ANGULAR_SPEED, MAX_ANGULAR_SPEED);
+    const spinA = (2 * tangentImpulse) / (a.mass * Math.max(8, a.r));
+    const spinB = (2 * tangentImpulse) / (b.mass * Math.max(8, b.r));
+    a.av = clamp(a.av - spinA * SPIN_TRANSFER, -MAX_ANGULAR_SPEED, MAX_ANGULAR_SPEED);
+    b.av = clamp(b.av + spinB * SPIN_TRANSFER, -MAX_ANGULAR_SPEED, MAX_ANGULAR_SPEED);
+  }
 }
 
 function solveWalls(fruit) {
@@ -389,17 +406,17 @@ function solveWalls(fruit) {
   if (fruit.x - fruit.r < WALL) {
     fruit.x = WALL + fruit.r;
     fruit.vx = Math.abs(fruit.vx) * WALL_BOUNCE;
-    fruit.av += clamp(-fruit.vy / Math.max(180, fruit.r * 5), -0.02, 0.02);
+    fruit.av *= 0.92;
   }
   if (fruit.x + fruit.r > WIDTH - WALL) {
     fruit.x = WIDTH - WALL - fruit.r;
     fruit.vx = -Math.abs(fruit.vx) * WALL_BOUNCE;
-    fruit.av += clamp(fruit.vy / Math.max(180, fruit.r * 5), -0.02, 0.02);
+    fruit.av *= 0.92;
   }
   if (fruit.y + fruit.r > HEIGHT) {
     fruit.y = HEIGHT - fruit.r;
     if (fruit.vy > 0) {
-      fruit.vy = -fruit.vy * 0.06;
+      fruit.vy = fruit.vy < 0.35 ? 0 : -fruit.vy * 0.04;
     }
     fruit.vx *= FLOOR_FRICTION;
 
@@ -408,7 +425,15 @@ function solveWalls(fruit) {
     fruit.vx -= grip;
     fruit.av += grip / Math.max(8, fruit.r);
 
-    if (Math.abs(fruit.vy) < 0.11) fruit.vy = 0;
+    if (Math.abs(fruit.vy) < 0.08) fruit.vy = 0;
+
+    if (fruit.vy === 0) {
+      fruit.av *= FLOOR_ANGULAR_DAMPING;
+      if (Math.abs(fruit.vx) < REST_LINEAR_EPSILON && Math.abs(fruit.av) < REST_ANGULAR_EPSILON) {
+        fruit.vx = 0;
+        fruit.av = 0;
+      }
+    }
   }
 }
 
@@ -422,7 +447,7 @@ function integrateFruit(fruit) {
   solveWalls(fruit);
 
   fruit.av = clamp(fruit.av * ANGULAR_DAMPING, -MAX_ANGULAR_SPEED, MAX_ANGULAR_SPEED);
-  if (Math.abs(fruit.av) < 0.0002) fruit.av = 0;
+  if (Math.abs(fruit.av) < 0.0012) fruit.av = 0;
   fruit.angle += fruit.av;
   if (fruit.angle > Math.PI * 2 || fruit.angle < -Math.PI * 2) {
     fruit.angle %= Math.PI * 2;
@@ -492,8 +517,8 @@ function physicsStep() {
     if (fruit.y + fruit.r >= HEIGHT - 0.5) {
       fruit.vx *= SURFACE_FRICTION;
     }
-    if (Math.abs(fruit.vx) < 0.01) fruit.vx = 0;
-    if (Math.abs(fruit.vy) < 0.01) fruit.vy = 0;
+    if (Math.abs(fruit.vx) < 0.015) fruit.vx = 0;
+    if (Math.abs(fruit.vy) < 0.015) fruit.vy = 0;
   }
 
   fruits = fruits.filter((fruit) => !fruit.remove);
@@ -560,30 +585,6 @@ function drawGuideLine() {
   ctx.restore();
 }
 
-function drawCurrentDropShadow() {
-  const fruit = FRUITS[currentType];
-  ctx.save();
-
-  ctx.globalAlpha = canDrop ? 0.62 : 0.38;
-  ctx.beginPath();
-  ctx.fillStyle = fruit.color;
-  ctx.arc(pointerX, SPAWN_Y, fruit.radius, 0, Math.PI * 2);
-  ctx.fill();
-
-  ctx.globalAlpha = canDrop ? 0.82 : 0.5;
-  ctx.lineWidth = 2;
-  ctx.strokeStyle = 'rgba(255, 255, 255, 0.65)';
-  ctx.stroke();
-
-  ctx.globalAlpha = canDrop ? 0.85 : 0.55;
-  ctx.font = `${Math.max(16, fruit.radius * 0.98)}px serif`;
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.fillStyle = '#ffffff';
-  ctx.fillText(fruit.emoji, pointerX, SPAWN_Y + 2);
-
-  ctx.restore();
-}
 
 function drawBackground() {
   const background = ctx.createLinearGradient(0, 0, 0, HEIGHT);
@@ -627,7 +628,6 @@ function render() {
   }
   drawBackground();
   drawGuideLine();
-  drawCurrentDropShadow();
   for (const fruit of fruits) drawFruit(fruit);
   drawParticles();
   ctx.restore();
@@ -748,4 +748,3 @@ function frame(timestamp) {
 
 resetGame();
 requestAnimationFrame(frame);
-
