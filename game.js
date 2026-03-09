@@ -33,6 +33,10 @@ const SURFACE_FRICTION = 0.9996;
 const WALL_BOUNCE = 0.12;
 const BODY_BOUNCE = 0.06;
 const COLLISION_FRICTION = 0.012;
+const SPIN_TRANSFER = 0.92;
+const ANGULAR_DAMPING = 0.996;
+const MAX_ANGULAR_SPEED = 0.34;
+const ROLLING_GRIP = 0.055;
 const SOLVER_ITERATIONS = 6;
 
 const DROP_COOLDOWN_MS = Math.round(430 / GAME_SPEED);
@@ -125,6 +129,28 @@ function getDropBounds(type) {
   };
 }
 
+function getCanvasContentRect() {
+  const rect = canvas.getBoundingClientRect();
+  const style = typeof window.getComputedStyle === 'function'
+    ? window.getComputedStyle(canvas)
+    : { borderLeftWidth: '0', borderRightWidth: '0', borderTopWidth: '0', borderBottomWidth: '0' };
+
+  const borderLeft = Number.parseFloat(style.borderLeftWidth) || 0;
+  const borderRight = Number.parseFloat(style.borderRightWidth) || 0;
+  const borderTop = Number.parseFloat(style.borderTopWidth) || 0;
+  const borderBottom = Number.parseFloat(style.borderBottomWidth) || 0;
+
+  const width = Math.max(1, rect.width - borderLeft - borderRight);
+  const height = Math.max(1, rect.height - borderTop - borderBottom);
+
+  return {
+    left: rect.left + borderLeft,
+    top: rect.top + borderTop,
+    width,
+    height,
+  };
+}
+
 function syncPointerToCurrentType() {
   const { min, max } = getDropBounds(currentType);
   pointerX = clamp(pointerX, min, max);
@@ -173,15 +199,31 @@ function updateChainUi() {
   comboEl.textContent = chainFrames > 0 && chainCount > 1 ? `CHAIN x${chainCount}` : 'READY';
 }
 
+function updatePreviewVisual() {
+  const meta = FRUITS[currentType];
+  const canvasContent = getCanvasContentRect();
+  const scale = canvasContent.width / WIDTH;
+  const size = clamp(meta.radius * 2 * scale, 24, 88);
+
+  previewFruitEl.style.width = `${size}px`;
+  previewFruitEl.style.height = `${size}px`;
+  previewFruitEl.style.fontSize = `${Math.max(16, size * 0.62)}px`;
+  previewFruitEl.style.background = meta.color;
+  previewFruitEl.style.boxShadow =
+    `inset 0 ${Math.max(4, size * 0.22)}px ${Math.max(8, size * 0.35)}px rgba(255,255,255,0.24), ` +
+    '0 6px 12px rgba(0,0,0,0.2)';
+}
+
 function updatePreview() {
   previewFruitEl.textContent = FRUITS[currentType].emoji;
   nextFruitEl.textContent = FRUITS[nextType].emoji;
+  updatePreviewVisual();
 }
 
 function updatePreviewPosition() {
   const shellRect = boardShell.getBoundingClientRect();
-  const canvasRect = canvas.getBoundingClientRect();
-  const left = canvasRect.left - shellRect.left + (pointerX / WIDTH) * canvasRect.width;
+  const canvasContent = getCanvasContentRect();
+  const left = canvasContent.left - shellRect.left + (pointerX / WIDTH) * canvasContent.width;
 
   previewFruitEl.style.left = `${left}px`;
   cloudEl.style.left = `${left}px`;
@@ -199,6 +241,8 @@ function createFruit(type, x, y = SPAWN_Y) {
     r: FRUITS[type].radius,
     mass: getMass(type),
     gravityScale: getGravityScale(type),
+    angle: 0,
+    av: 0,
     bornFrame: frameCount,
     mergeCooldown: 8,
     remove: false,
@@ -264,6 +308,8 @@ function mergeFruits(a, b, spawnedFruits) {
   const merged = createFruit(next, (a.x + b.x) / 2, (a.y + b.y) / 2);
   merged.vx = (a.vx + b.vx) * 0.18;
   merged.vy = Math.min(a.vy, b.vy) - lerp(0.65, 1.1, next / (FRUITS.length - 1));
+  merged.angle = (a.angle + b.angle) * 0.5;
+  merged.av = (a.av + b.av) * 0.45;
   merged.mergeCooldown = 9;
   spawnedFruits.push(merged);
 
@@ -330,6 +376,11 @@ function solveCollision(a, b, spawnedFruits) {
   a.vy -= fiy / a.mass;
   b.vx += fix / b.mass;
   b.vy += fiy / b.mass;
+
+  const spinA = (2 * tangentImpulse) / (a.mass * Math.max(8, a.r));
+  const spinB = (2 * tangentImpulse) / (b.mass * Math.max(8, b.r));
+  a.av = clamp(a.av - spinA * SPIN_TRANSFER, -MAX_ANGULAR_SPEED, MAX_ANGULAR_SPEED);
+  b.av = clamp(b.av + spinB * SPIN_TRANSFER, -MAX_ANGULAR_SPEED, MAX_ANGULAR_SPEED);
 }
 
 function solveWalls(fruit) {
@@ -338,10 +389,12 @@ function solveWalls(fruit) {
   if (fruit.x - fruit.r < WALL) {
     fruit.x = WALL + fruit.r;
     fruit.vx = Math.abs(fruit.vx) * WALL_BOUNCE;
+    fruit.av += clamp(-fruit.vy / Math.max(180, fruit.r * 5), -0.02, 0.02);
   }
   if (fruit.x + fruit.r > WIDTH - WALL) {
     fruit.x = WIDTH - WALL - fruit.r;
     fruit.vx = -Math.abs(fruit.vx) * WALL_BOUNCE;
+    fruit.av += clamp(fruit.vy / Math.max(180, fruit.r * 5), -0.02, 0.02);
   }
   if (fruit.y + fruit.r > HEIGHT) {
     fruit.y = HEIGHT - fruit.r;
@@ -349,6 +402,12 @@ function solveWalls(fruit) {
       fruit.vy = -fruit.vy * 0.06;
     }
     fruit.vx *= FLOOR_FRICTION;
+
+    const slip = fruit.vx - fruit.av * fruit.r;
+    const grip = clamp(slip * ROLLING_GRIP, -0.22, 0.22);
+    fruit.vx -= grip;
+    fruit.av += grip / Math.max(8, fruit.r);
+
     if (Math.abs(fruit.vy) < 0.11) fruit.vy = 0;
   }
 }
@@ -361,6 +420,13 @@ function integrateFruit(fruit) {
   fruit.y += fruit.vy;
   fruit.mergeCooldown = Math.max(0, fruit.mergeCooldown - 1);
   solveWalls(fruit);
+
+  fruit.av = clamp(fruit.av * ANGULAR_DAMPING, -MAX_ANGULAR_SPEED, MAX_ANGULAR_SPEED);
+  if (Math.abs(fruit.av) < 0.0002) fruit.av = 0;
+  fruit.angle += fruit.av;
+  if (fruit.angle > Math.PI * 2 || fruit.angle < -Math.PI * 2) {
+    fruit.angle %= Math.PI * 2;
+  }
 }
 
 function updateDangerState() {
@@ -457,6 +523,7 @@ function drawFruit(fruit) {
   const meta = FRUITS[fruit.type];
   ctx.save();
   ctx.translate(fruit.x, fruit.y);
+  ctx.rotate(fruit.angle);
 
   ctx.beginPath();
   ctx.fillStyle = meta.color;
@@ -606,10 +673,10 @@ function resetGame() {
 }
 
 function setPointer(clientX) {
-  const rect = canvas.getBoundingClientRect();
-  if (rect.width === 0) return;
+  const canvasContent = getCanvasContentRect();
+  if (canvasContent.width === 0) return;
 
-  const nextX = ((clientX - rect.left) / rect.width) * WIDTH;
+  const nextX = ((clientX - canvasContent.left) / canvasContent.width) * WIDTH;
   const { min, max } = getDropBounds(currentType);
   pointerX = clamp(nextX, min, max);
   updatePreviewPosition();
@@ -648,7 +715,10 @@ window.addEventListener('keydown', (event) => {
   }
 });
 
-window.addEventListener('resize', updatePreviewPosition);
+window.addEventListener('resize', () => {
+  updatePreviewVisual();
+  updatePreviewPosition();
+});
 restartBtn.addEventListener('click', resetGame);
 
 function frame(timestamp) {
@@ -678,3 +748,4 @@ function frame(timestamp) {
 
 resetGame();
 requestAnimationFrame(frame);
+
