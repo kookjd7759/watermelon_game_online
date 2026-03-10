@@ -29,11 +29,11 @@ const MAX_CATCHUP_STEPS = 5;
 
 const BASE_GRAVITY = 0.1696;
 const AIR_DAMPING = 0.9987;
-const FLOOR_FRICTION = 0.9908;
+const FLOOR_FRICTION = 0.995;
 const SURFACE_FRICTION = 0.9960;
 const WALL_BOUNCE = 0.08;
 const BODY_BOUNCE = 0.035;
-const COLLISION_FRICTION = 0.0241;
+const COLLISION_FRICTION = 0.55;
 const SPIN_TRANSFER = 0.42;
 const ANGULAR_DAMPING = 0.9945;
 const MAX_ANGULAR_SPEED = 0.26;
@@ -55,6 +55,8 @@ const DROP_COOLDOWN_MS = Math.round(460 / GAME_SPEED);
 const DROP_DEBOUNCE_MS = 90;
 const GAME_OVER_SECONDS = 3;
 const GAME_OVER_FRAMES = Math.round(GAME_OVER_SECONDS * PHYSICS_FPS * GAME_SPEED);
+const DANGER_LINE_RED_DELAY_SECONDS = 0.5;
+const DANGER_LINE_RED_DELAY_FRAMES = Math.round(DANGER_LINE_RED_DELAY_SECONDS * PHYSICS_FPS * GAME_SPEED);
 const START_TYPE_MAX = 4; // Up to Persimmon can spawn directly.
 const SPAWN_PROTECTION_FRAMES = 24;
 const WATERMELON_CLEAR_SCORE = 66;
@@ -69,14 +71,14 @@ const FRUITS = [
   { name: 'Cherry', label: 'Cherry', radius: 16, score: 1, color: '#ef4c4c', skin: 'cherry' },
   { name: 'Strawberry', label: 'Strawberry', radius: 22, score: 3, color: '#ff5d84', skin: 'strawberry' },
   { name: 'Grape', label: 'Grape', radius: 29, score: 6, color: '#7c6cff', skin: 'grape' },
-  { name: 'Hallabong', label: 'Hallabong', radius: 36, score: 10, color: '#ffb347', skin: 'dekopon' },
-  { name: 'Persimmon', label: 'Persimmon', radius: 43, score: 15, color: '#ff8f4a', skin: 'persimmon' },
-  { name: 'Apple', label: 'Apple', radius: 50, score: 21, color: '#ff6666', skin: 'apple' },
-  { name: 'Pear', label: 'Pear', radius: 58, score: 28, color: '#d6df6e', skin: 'pear' },
-  { name: 'Peach', label: 'Peach', radius: 67, score: 36, color: '#ffb29f', skin: 'peach' },
-  { name: 'Pineapple', label: 'Pineapple', radius: 77, score: 45, color: '#ffd368', skin: 'pineapple' },
-  { name: 'Melon', label: 'Melon', radius: 88, score: 55, color: '#94df73', skin: 'melon' },
-  { name: 'Watermelon', label: 'Watermelon', radius: 100, score: 66, color: '#46b55d', skin: 'watermelon' },
+  { name: 'Hallabong', label: 'Hallabong', radius: 37.62, score: 10, color: '#ffb347', skin: 'dekopon' },
+  { name: 'Persimmon', label: 'Persimmon', radius: 49.665, score: 15, color: '#ff8f4a', skin: 'persimmon' },
+  { name: 'Apple', label: 'Apple', radius: 65, score: 21, color: '#ff6666', skin: 'apple' },
+  { name: 'Pear', label: 'Pear', radius: 98.252, score: 28, color: '#d6df6e', skin: 'pear' },
+  { name: 'Peach', label: 'Peach', radius: 96.48, score: 36, color: '#ffb29f', skin: 'peach' },
+  { name: 'Pineapple', label: 'Pineapple', radius: 130.9, score: 45, color: '#ffd368', skin: 'pineapple' },
+  { name: 'Melon', label: 'Melon', radius: 167.2, score: 55, color: '#94df73', skin: 'melon' },
+  { name: 'Watermelon', label: 'Watermelon', radius: 200, score: 66, color: '#46b55d', skin: 'watermelon' },
 ];
 
 // Per-fruit radius tuning for gameplay feel and progression balance.
@@ -2035,7 +2037,7 @@ function updateDangerState() {
     }
   }
 
-  dangerFrames = isDanger ? dangerFrames + 1 : Math.max(0, dangerFrames - 1);
+  dangerFrames = isDanger ? dangerFrames + 1 : 0;
   updateDangerMeter();
 
   if (isDanger) {
@@ -2146,8 +2148,30 @@ function drawBackground() {
   ctx.fillStyle = 'rgba(255,255,255,0.08)';
   ctx.fillRect(10, 8, WIDTH - 20, 18);
 
-  ctx.strokeStyle = 'rgba(193, 132, 66, 0.5)';
-  ctx.lineWidth = 3;
+  const delayedDangerFrames = Math.max(0, dangerFrames - DANGER_LINE_RED_DELAY_FRAMES);
+  const dangerRatio = clamp(
+    delayedDangerFrames / Math.max(1, GAME_OVER_FRAMES - DANGER_LINE_RED_DELAY_FRAMES),
+    0,
+    1,
+  );
+
+  if (dangerRatio > 0) {
+    const dangerGlow = ctx.createLinearGradient(0, 0, 0, DANGER_LINE + 72);
+    dangerGlow.addColorStop(0, `rgba(239, 76, 64, ${0.2 * dangerRatio})`);
+    dangerGlow.addColorStop(1, 'rgba(239, 76, 64, 0)');
+    ctx.fillStyle = dangerGlow;
+    ctx.fillRect(0, 0, WIDTH, DANGER_LINE + 72);
+  }
+
+  const safeLine = { r: 193, g: 132, b: 66, a: 0.5 };
+  const dangerLine = { r: 235, g: 62, b: 54, a: 0.9 };
+  const lr = Math.round(lerp(safeLine.r, dangerLine.r, dangerRatio));
+  const lg = Math.round(lerp(safeLine.g, dangerLine.g, dangerRatio));
+  const lb = Math.round(lerp(safeLine.b, dangerLine.b, dangerRatio));
+  const la = lerp(safeLine.a, dangerLine.a, dangerRatio);
+
+  ctx.strokeStyle = `rgba(${lr}, ${lg}, ${lb}, ${la.toFixed(3)})`;
+  ctx.lineWidth = 2.8 + (dangerRatio * 1.4);
   ctx.setLineDash([8, 8]);
   ctx.beginPath();
   ctx.moveTo(0, DANGER_LINE);
@@ -2155,8 +2179,23 @@ function drawBackground() {
   ctx.stroke();
   ctx.setLineDash([]);
 
-  ctx.fillStyle = 'rgba(160, 116, 49, 0.12)';
-  ctx.fillRect(0, HEIGHT - 12, WIDTH, 12);
+  if (dangerRatio > 0) {
+    ctx.strokeStyle = `rgba(245, 72, 59, ${(0.16 + dangerRatio * 0.24).toFixed(3)})`;
+    ctx.lineWidth = 7 + dangerRatio * 8;
+    ctx.beginPath();
+    ctx.moveTo(0, DANGER_LINE);
+    ctx.lineTo(WIDTH, DANGER_LINE);
+    ctx.stroke();
+  }
+
+  const floorGlow = ctx.createLinearGradient(0, HEIGHT - 54, 0, HEIGHT);
+  floorGlow.addColorStop(0, 'rgba(160, 116, 49, 0)');
+  floorGlow.addColorStop(1, 'rgba(160, 116, 49, 0.24)');
+  ctx.fillStyle = floorGlow;
+  ctx.fillRect(0, HEIGHT - 54, WIDTH, 54);
+
+  ctx.fillStyle = 'rgba(160, 116, 49, 0.18)';
+  ctx.fillRect(0, HEIGHT - 10, WIDTH, 10);
 }
 
 function drawParticles() {
