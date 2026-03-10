@@ -1,58 +1,63 @@
 <!DOCTYPE html>
-<html lang="ko">
+<html lang="en">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Watermelon Game</title>
-  <link rel="stylesheet" href="styles.css?v=20260309-3" />
+  <link rel="stylesheet" href="styles.css?v=20260310-2" />
 </head>
 <body>
   <header class="topbar">
-    <div class="brand"><span class="brand-icon">🍉</span> playSuikaGame</div>
+    <div class="brand">
+      <span class="brand-icon" aria-hidden="true"></span>
+      playSuikaGame
+    </div>
   </header>
 
   <main class="layout">
     <aside class="panel left-panel">
       <section class="bubble score-bubble">
-        <h2>스코어</h2>
+        <h2>Score</h2>
         <div class="score-value" id="score">0</div>
-        <div class="best-label">최고 점수</div>
+        <div class="best-label">Best Score</div>
         <div class="best-value" id="bestScore">0</div>
       </section>
 
       <section class="info-card card status-card">
-        <div class="card-title">상태</div>
-        <div class="state-badge" id="stateBadge">준비 완료</div>
+        <div class="card-title">Status</div>
+        <div class="state-badge" id="stateBadge">Ready</div>
         <div class="danger-meter">
           <div class="danger-fill" id="dangerFill"></div>
         </div>
-        <div class="danger-help">위험선 위에 과일이 오래 머무르면 게임 오버</div>
+        <div class="danger-help">
+          If fruits stay near the danger line for too long, the game ends.
+        </div>
       </section>
     </aside>
 
     <section class="center-panel">
       <div class="board-shell" id="boardShell">
-        <div class="mascot" id="cloudMascot">☁️</div>
-        <div class="preview-fruit" id="previewFruit">🍒</div>
+        <div class="mascot hidden" id="cloudMascot" aria-hidden="true"></div>
+        <div class="preview-fruit" id="previewFruit" aria-hidden="true"></div>
         <canvas id="gameCanvas" width="420" height="640"></canvas>
         <div class="overlay hidden" id="gameOverOverlay">
           <div class="overlay-card">
-            <h2>게임 오버</h2>
-            <p>최종 점수 <strong id="finalScore">0</strong></p>
-            <button id="restartBtn" type="button">다시 시작</button>
+            <h2>Game Over</h2>
+            <p>Final Score <strong id="finalScore">0</strong></p>
+            <button id="restartBtn" type="button">Restart</button>
           </div>
         </div>
       </div>
 
       <div class="controls card">
         <div class="controls-top">
-          <span>마우스/터치로 위치 이동</span>
-          <span>클릭/Space/Enter 드롭</span>
-          <span>R 다시 시작</span>
+          <span>Move with mouse or touch</span>
+          <span>Click / Space / Enter to drop</span>
+          <span>R to restart</span>
         </div>
         <div class="controls-bottom">
-          <span>← / → 이동</span>
-          <span>같은 과일끼리 합체</span>
+          <span>&larr; / &rarr; move</span>
+          <span>Merge identical fruits</span>
           <span class="combo-chip" id="comboValue">READY</span>
         </div>
       </div>
@@ -60,29 +65,37 @@
 
     <aside class="panel right-panel">
       <section class="bubble next-bubble">
-        <h2>다음</h2>
-        <div class="next-value" id="nextFruit">🍒</div>
+        <h2>Next</h2>
+        <div class="next-value" id="nextFruit" aria-hidden="true"></div>
       </section>
 
-      <section class="ring-box">
-        <h3>과일 단계</h3>
-        <div class="fruit-ring">
-          <span style="--a:0deg">🍒</span>
-          <span style="--a:32deg">🍓</span>
-          <span style="--a:65deg">🍇</span>
-          <span style="--a:98deg">🍊</span>
-          <span style="--a:131deg">🟠</span>
-          <span style="--a:164deg">🍎</span>
-          <span style="--a:196deg">🍐</span>
-          <span style="--a:229deg">🍑</span>
-          <span style="--a:262deg">🍍</span>
-          <span style="--a:295deg">🍈</span>
-          <span style="--a:327deg">🍉</span>
-        </div>
+      <section class="legend-box card">
+        <h3>Fruit Order</h3>
+        <p class="legend-help">
+          There are 11 fruit levels from cherry to watermelon. Only fruits up to persimmon drop naturally.
+          Apple and above are merge-only. Two watermelons disappear and give 66 points.
+        </p>
+        <div class="fruit-legend-grid" id="fruitLegend"></div>
       </section>
     </aside>
   </main>
 
-  <script src="game.js?v=20260309-3"></script>
+  <script src="game.js?v=20260310-36"></script>
 </body>
 </html>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

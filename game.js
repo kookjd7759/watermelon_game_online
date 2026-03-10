@@ -13,6 +13,7 @@ const boardShell = document.getElementById('boardShell');
 const stateBadgeEl = document.getElementById('stateBadge');
 const dangerFillEl = document.getElementById('dangerFill');
 const comboEl = document.getElementById('comboValue');
+const fruitLegendEl = document.getElementById('fruitLegend');
 
 const WIDTH = canvas.width;
 const HEIGHT = canvas.height;
@@ -21,55 +22,348 @@ const SPAWN_Y = 40;
 const GUIDE_TOP_Y = 30;
 const DANGER_LINE = 94;
 
-const GAME_SPEED = 1.0;
+const GAME_SPEED = 1.3;
 const PHYSICS_FPS = 60;
 const FIXED_STEP_MS = 1000 / PHYSICS_FPS;
 const MAX_CATCHUP_STEPS = 5;
 
-const BASE_GRAVITY = 0.225;
-const AIR_DAMPING = 0.9992;
-const FLOOR_FRICTION = 0.9962;
-const SURFACE_FRICTION = 0.999;
+const BASE_GRAVITY = 0.1696;
+const AIR_DAMPING = 0.9987;
+const FLOOR_FRICTION = 0.9908;
+const SURFACE_FRICTION = 0.9960;
 const WALL_BOUNCE = 0.08;
 const BODY_BOUNCE = 0.035;
-const COLLISION_FRICTION = 0.0075;
+const COLLISION_FRICTION = 0.0241;
 const SPIN_TRANSFER = 0.42;
 const ANGULAR_DAMPING = 0.9945;
 const MAX_ANGULAR_SPEED = 0.26;
-const ROLLING_GRIP = 0.035;
-const FLOOR_ANGULAR_DAMPING = 0.84;
+const ROLLING_GRIP = 0.0702;
+const FLOOR_ANGULAR_DAMPING = 0.79;
 const TANGENT_SPIN_EPSILON = 0.06;
 const REST_LINEAR_EPSILON = 0.025;
 const REST_ANGULAR_EPSILON = 0.0022;
+const ANGULAR_REST_LOCK = 0.0032;
+const STABLE_ANGULAR_DAMPING = 0.72;
+const ROTATION_STABILIZE_LINEAR = 0.045;
+const FLOOR_STICK_EPSILON = 1.4;
 const CONTACT_SLOP = 0.1;
 const POSITION_CORRECTION = 0.95;
 const MIN_BOUNCE_SPEED = 0.55;
 const SOLVER_ITERATIONS = 8;
 
 const DROP_COOLDOWN_MS = Math.round(460 / GAME_SPEED);
-const GAME_OVER_FRAMES = 70;
-const START_TYPE_MAX = 4;
+const DROP_DEBOUNCE_MS = 90;
+const GAME_OVER_SECONDS = 3;
+const GAME_OVER_FRAMES = Math.round(GAME_OVER_SECONDS * PHYSICS_FPS * GAME_SPEED);
+const START_TYPE_MAX = 4; // Up to Persimmon can spawn directly.
 const SPAWN_PROTECTION_FRAMES = 24;
-const LOW_SPEED_THRESHOLD = 0.62;
+const WATERMELON_CLEAR_SCORE = 66;
+const TAU = Math.PI * 2;
 
-const STATUS_READY = '\uC900\uBE44 \uC644\uB8CC';
-const STATUS_COOLDOWN = '\uB4DC\uB86D \uB300\uAE30';
-const STATUS_DANGER = '\uC704\uD5D8';
-const STATUS_GAME_OVER = '\uAC8C\uC784 \uC624\uBC84';
+const STATUS_READY = 'Ready';
+const STATUS_COOLDOWN = 'Drop Cooldown';
+const STATUS_DANGER = 'Danger';
+const STATUS_GAME_OVER = 'Game Over';
 
 const FRUITS = [
-  { name: 'Cherry', emoji: '\u{1F352}', radius: 16, score: 1, color: '#ef4c4c' },
-  { name: 'Strawberry', emoji: '\u{1F353}', radius: 22, score: 3, color: '#ff5d84' },
-  { name: 'Grape', emoji: '\u{1F347}', radius: 29, score: 6, color: '#7c6cff' },
-  { name: 'Orange', emoji: '\u{1F34A}', radius: 36, score: 10, color: '#ffb347' },
-  { name: 'Persimmon', emoji: '\u{1F7E0}', radius: 43, score: 15, color: '#ff8f4a' },
-  { name: 'Apple', emoji: '\u{1F34E}', radius: 50, score: 21, color: '#ff6666' },
-  { name: 'Pear', emoji: '\u{1F350}', radius: 58, score: 28, color: '#b8dd60' },
-  { name: 'Peach', emoji: '\u{1F351}', radius: 67, score: 36, color: '#ffb29f' },
-  { name: 'Pineapple', emoji: '\u{1F34D}', radius: 77, score: 45, color: '#ffd368' },
-  { name: 'Melon', emoji: '\u{1F348}', radius: 88, score: 55, color: '#94df73' },
-  { name: 'Watermelon', emoji: '\u{1F349}', radius: 100, score: 66, color: '#46b55d' },
+  { name: 'Cherry', label: 'Cherry', radius: 16, score: 1, color: '#ef4c4c', skin: 'cherry' },
+  { name: 'Strawberry', label: 'Strawberry', radius: 22, score: 3, color: '#ff5d84', skin: 'strawberry' },
+  { name: 'Grape', label: 'Grape', radius: 29, score: 6, color: '#7c6cff', skin: 'grape' },
+  { name: 'Hallabong', label: 'Hallabong', radius: 36, score: 10, color: '#ffb347', skin: 'dekopon' },
+  { name: 'Persimmon', label: 'Persimmon', radius: 43, score: 15, color: '#ff8f4a', skin: 'persimmon' },
+  { name: 'Apple', label: 'Apple', radius: 50, score: 21, color: '#ff6666', skin: 'apple' },
+  { name: 'Pear', label: 'Pear', radius: 58, score: 28, color: '#d6df6e', skin: 'pear' },
+  { name: 'Peach', label: 'Peach', radius: 67, score: 36, color: '#ffb29f', skin: 'peach' },
+  { name: 'Pineapple', label: 'Pineapple', radius: 77, score: 45, color: '#ffd368', skin: 'pineapple' },
+  { name: 'Melon', label: 'Melon', radius: 88, score: 55, color: '#94df73', skin: 'melon' },
+  { name: 'Watermelon', label: 'Watermelon', radius: 100, score: 66, color: '#46b55d', skin: 'watermelon' },
 ];
+
+// Per-fruit radius tuning for gameplay feel and progression balance.
+const FRUIT_COLLISION_SCALES = [
+  0.99, // Cherry
+  0.86, // Strawberry
+  0.9, // Grape
+  0.96, // Hallabong
+  0.9, // Persimmon
+  0.95, // Apple
+  0.93, // Pear
+  0.95, // Peach
+  0.89, // Pineapple
+  0.94, // Melon
+  0.93, // Watermelon
+];
+
+
+
+const spriteCanvasCache = new Map();
+const spriteUrlCache = new Map();
+const FRUIT_ASSET_PATHS = FRUITS.map((_, index) => `assets/${index + 1}.png`);
+const DEFAULT_SPRITE_SCALE = 1.04;
+const HITBOX_ANALYSIS_SIZE = 192;
+const HITBOX_ANALYSIS_ALPHA = 24;
+const HITBOX_ANALYSIS_BINS = 800;
+const HITBOX_TARGET_PERCENTILE = 0.99;
+const MIN_SPRITE_SCALE = 0.92;
+const MAX_SPRITE_SCALE = 1.16;
+const fruitRenderScales = FRUITS.map(() => DEFAULT_SPRITE_SCALE);
+const DEFAULT_HITBOX_TEMPLATE = Object.freeze([{ x: 0, y: 0, r: 0.92 }]);
+// Hand-tuned collision templates (normalized to sprite half-size).
+// Decorative stems/leaves are intentionally excluded to keep contact stable.
+const FRUIT_MANUAL_HITBOX_TEMPLATES = [
+  [
+    { x: -0.29, y: 0.31, r: 0.38 },
+    { x: 0.29, y: 0.31, r: 0.38 },
+    { x: 0, y: 0.39, r: 0.29 },
+    { x: -0.17, y: 0.06, r: 0.12 },
+    { x: 0.17, y: 0.06, r: 0.12 },
+  ],
+  [
+    { x: 0, y: 0.04, r: 0.45 },
+    { x: -0.27, y: 0.06, r: 0.22 },
+    { x: 0.27, y: 0.06, r: 0.22 },
+    { x: -0.25, y: 0.34, r: 0.24 },
+    { x: 0.25, y: 0.34, r: 0.24 },
+    { x: 0, y: -0.30, r: 0.2 },
+    { x: -0.19, y: -0.20, r: 0.16 },
+    { x: 0.19, y: -0.20, r: 0.16 },
+    { x: 0, y: 0.62, r: 0.29 },
+  ],
+  [
+    { x: 0, y: 0.03, r: 0.34 },
+    { x: -0.24, y: 0.02, r: 0.22 },
+    { x: 0.24, y: 0.02, r: 0.22 },
+    { x: 0, y: -0.18, r: 0.2 },
+    { x: -0.14, y: 0.34, r: 0.2 },
+    { x: 0.14, y: 0.34, r: 0.2 },
+    { x: 0, y: 0.61, r: 0.2 },
+    { x: 0, y: -0.33, r: 0.12 },
+    { x: -0.22, y: -0.24, r: 0.11 },
+    { x: 0.22, y: -0.24, r: 0.11 },
+  ],
+  [
+    { x: 0, y: 0.17, r: 0.59 },
+    { x: -0.32, y: 0.21, r: 0.3 },
+    { x: 0.32, y: 0.21, r: 0.3 },
+    { x: 0, y: 0.5, r: 0.26 },
+  ],
+  [
+    { x: 0, y: 0.16, r: 0.58 },
+    { x: -0.31, y: 0.17, r: 0.29 },
+    { x: 0.31, y: 0.17, r: 0.29 },
+    { x: 0, y: 0.48, r: 0.24 },
+  ],
+  [
+    { x: 0.03, y: 0.17, r: 0.59 },
+    { x: -0.3, y: 0.2, r: 0.28 },
+    { x: 0.3, y: 0.2, r: 0.28 },
+    { x: 0.03, y: 0.5, r: 0.24 },
+  ],
+  [
+    { x: 0, y: 0.35, r: 0.45 },
+    { x: 0, y: 0.02, r: 0.3 },
+    { x: -0.22, y: 0.36, r: 0.24 },
+    { x: 0.22, y: 0.36, r: 0.24 },
+  ],
+  [
+    { x: 0, y: 0.19, r: 0.6 },
+    { x: -0.28, y: 0.21, r: 0.27 },
+    { x: 0.28, y: 0.21, r: 0.27 },
+    { x: 0, y: 0.54, r: 0.22 },
+  ],
+  [
+    { x: 0, y: 0.36, r: 0.43 },
+    { x: 0, y: 0.07, r: 0.28 },
+    { x: -0.22, y: 0.37, r: 0.22 },
+    { x: 0.22, y: 0.37, r: 0.22 },
+    { x: 0, y: 0.6, r: 0.22 },
+  ],
+  [
+    { x: 0, y: 0.18, r: 0.6 },
+    { x: -0.28, y: 0.2, r: 0.27 },
+    { x: 0.28, y: 0.2, r: 0.27 },
+    { x: 0, y: 0.52, r: 0.23 },
+  ],
+  [
+    { x: 0, y: 0.17, r: 0.62 },
+    { x: -0.29, y: 0.19, r: 0.28 },
+    { x: 0.29, y: 0.19, r: 0.28 },
+    { x: 0, y: 0.54, r: 0.24 },
+  ],
+];
+const GLOBAL_HITBOX_EXPANSION = 1.24;
+const FRUIT_HITBOX_EXPANSION = [
+  1.30, // Cherry
+  1.36, // Strawberry
+  1.30, // Grape
+  1.25, // Hallabong
+  1.28, // Persimmon
+  1.25, // Apple
+  1.19, // Pear
+  1.2, // Peach
+  1.16, // Pineapple
+  1.22, // Melon
+  1.2, // Watermelon
+];
+const fruitHitboxTemplates = FRUIT_MANUAL_HITBOX_TEMPLATES.map((template, type) => cloneHitboxTemplate(template, type));
+const fruitHitboxBounds = fruitHitboxTemplates.map((template) => getTemplateBoundRadius(template));
+const analysisCanvas = document.createElement('canvas');
+analysisCanvas.width = HITBOX_ANALYSIS_SIZE;
+analysisCanvas.height = HITBOX_ANALYSIS_SIZE;
+const analysisCtx = analysisCanvas.getContext('2d', { willReadFrequently: true });
+
+function analyzeFruitRenderScale(image) {
+  if (!analysisCtx) return DEFAULT_SPRITE_SCALE;
+
+  const size = HITBOX_ANALYSIS_SIZE;
+  const center = (size - 1) / 2;
+  const half = size / 2;
+  const bins = new Uint32Array(HITBOX_ANALYSIS_BINS);
+
+  analysisCtx.clearRect(0, 0, size, size);
+  analysisCtx.drawImage(image, 0, 0, size, size);
+
+  let data;
+  try {
+    data = analysisCtx.getImageData(0, 0, size, size).data;
+  } catch {
+    return DEFAULT_SPRITE_SCALE;
+  }
+  let opaqueCount = 0;
+
+  for (let y = 0; y < size; y += 1) {
+    for (let x = 0; x < size; x += 1) {
+      const idx = (y * size + x) * 4;
+      const alpha = data[idx + 3];
+      if (alpha < HITBOX_ANALYSIS_ALPHA) continue;
+
+      const dx = (x - center) / half;
+      const dy = (y - center) / half;
+      const distNorm = Math.hypot(dx, dy);
+      const bin = Math.min(HITBOX_ANALYSIS_BINS - 1, Math.floor(distNorm * HITBOX_ANALYSIS_BINS));
+      bins[bin] += 1;
+      opaqueCount += 1;
+    }
+  }
+
+  if (opaqueCount === 0) return DEFAULT_SPRITE_SCALE;
+
+  const targetCount = Math.ceil(opaqueCount * HITBOX_TARGET_PERCENTILE);
+  let cumulative = 0;
+  let percentileRadius = 1;
+
+  for (let i = 0; i < HITBOX_ANALYSIS_BINS; i += 1) {
+    cumulative += bins[i];
+    if (cumulative >= targetCount) {
+      percentileRadius = (i + 0.5) / HITBOX_ANALYSIS_BINS;
+      break;
+    }
+  }
+
+  const scale = 1 / Math.max(0.65, percentileRadius);
+  return Math.max(MIN_SPRITE_SCALE, Math.min(MAX_SPRITE_SCALE, scale));
+}
+
+function getTemplateBoundRadius(template) {
+  let bound = DEFAULT_HITBOX_TEMPLATE[0].r;
+  for (const circle of template) {
+    const candidate = Math.hypot(circle.x, circle.y) + circle.r;
+    if (candidate > bound) bound = candidate;
+  }
+  return bound;
+}
+
+function getFruitHitboxExpansion(type) {
+  const expansion = FRUIT_HITBOX_EXPANSION[type];
+  const perFruit = Number.isFinite(expansion) ? expansion : 1;
+  return perFruit * GLOBAL_HITBOX_EXPANSION;
+}
+
+function cloneHitboxTemplate(template, type = -1) {
+  if (!Array.isArray(template) || template.length === 0) {
+    return [{ ...DEFAULT_HITBOX_TEMPLATE[0] }];
+  }
+  const expansion = getFruitHitboxExpansion(type);
+  return template.map((circle) => ({
+    x: (Number.isFinite(circle.x) ? circle.x : 0) * expansion,
+    y: (Number.isFinite(circle.y) ? circle.y : 0) * expansion,
+    r: clamp((Number.isFinite(circle.r) ? circle.r : DEFAULT_HITBOX_TEMPLATE[0].r) * expansion, 0.05, 1.4),
+  }));
+}
+
+function getFruitRenderScale(type) {
+  return fruitRenderScales[type] || DEFAULT_SPRITE_SCALE;
+}
+
+function getFruitHitboxTemplate(type) {
+  return fruitHitboxTemplates[type] || DEFAULT_HITBOX_TEMPLATE;
+}
+
+function getFruitHitboxScale(type, radius = getFruitRadius(type)) {
+  return radius * getFruitRenderScale(type);
+}
+
+function updateFruitGeometry(fruit) {
+  const template = getFruitHitboxTemplate(fruit.type);
+  fruit.hitbox = template;
+  fruit.hitboxScale = getFruitHitboxScale(fruit.type, fruit.r);
+  const boundNorm = fruitHitboxBounds[fruit.type] || getTemplateBoundRadius(template);
+  fruit.boundR = boundNorm * fruit.hitboxScale;
+}
+
+function refreshFruitGeometries() {
+  if (!Array.isArray(fruits) || fruits.length === 0) return;
+  for (const fruit of fruits) updateFruitGeometry(fruit);
+}
+
+function updateFruitRenderScale(type) {
+  const image = fruitAssetImages[type];
+  if (!image || !image.complete || image.naturalWidth <= 0 || image.naturalHeight <= 0) {
+    fruitRenderScales[type] = DEFAULT_SPRITE_SCALE;
+    return;
+  }
+
+  fruitRenderScales[type] = analyzeFruitRenderScale(image);
+}
+
+function updateFruitHitbox(type) {
+  const manualTemplate = FRUIT_MANUAL_HITBOX_TEMPLATES[type];
+  const template = Array.isArray(manualTemplate) && manualTemplate.length > 0
+    ? manualTemplate
+    : DEFAULT_HITBOX_TEMPLATE;
+
+  const circles = cloneHitboxTemplate(template, type);
+  fruitHitboxTemplates[type] = circles;
+  fruitHitboxBounds[type] = getTemplateBoundRadius(circles);
+}
+
+function refreshFruitAssetUi() {
+  spriteCanvasCache.clear();
+  spriteUrlCache.clear();
+
+  if (typeof refreshFruitGeometries === 'function') refreshFruitGeometries();
+  if (typeof buildFruitLegend === 'function') buildFruitLegend();
+  if (typeof updatePreview === 'function') updatePreview();
+  if (typeof syncPointerToCurrentType === 'function') syncPointerToCurrentType();
+  if (typeof updatePreviewPosition === 'function') updatePreviewPosition();
+}
+
+const fruitAssetImages = FRUIT_ASSET_PATHS.map((src, type) => {
+  const image = new Image();
+  image.decoding = 'async';
+  image.addEventListener('load', () => {
+    updateFruitRenderScale(type);
+    updateFruitHitbox(type);
+    refreshFruitAssetUi();
+  });
+  image.addEventListener('error', () => {
+    fruitRenderScales[type] = DEFAULT_SPRITE_SCALE;
+    updateFruitHitbox(type);
+    refreshFruitAssetUi();
+  });
+  image.src = src;
+  return image;
+});
 
 let fruits = [];
 let particles = [];
@@ -89,6 +383,34 @@ let chainCount = 0;
 let chainFrames = 0;
 let lastFrameTime = 0;
 let accumulator = 0;
+let lastDropAt = -Infinity;
+let suppressClickUntil = 0;
+
+const HITBOX_EDITOR_STORAGE_KEY = 'watermelon-hitbox-editor-v1';
+const HITBOX_EDITOR_PANEL = Object.freeze({
+  x: 10,
+  y: 10,
+  w: 224,
+  h: 254,
+  cx: 122,
+  cy: 124,
+  r: 76,
+});
+const hitboxEditor = {
+  enabled: false,
+  type: 0,
+  selectedCircle: -1,
+  dragging: false,
+  dragMode: 'move',
+  pointerId: null,
+  dragOffsetX: 0,
+  dragOffsetY: 0,
+};
+
+if (cloudEl) {
+  cloudEl.textContent = '';
+  cloudEl.classList.add('hidden');
+}
 
 bestScoreEl.textContent = String(bestScore);
 
@@ -116,20 +438,31 @@ function clamp(value, min, max) {
   return Math.max(min, Math.min(max, value));
 }
 
+function getNow() {
+  return typeof performance !== 'undefined' ? performance.now() : Date.now();
+}
+
 function lerp(a, b, t) {
   return a + (b - a) * t;
 }
 
+function getFruitRadius(type) {
+  const scale = FRUIT_COLLISION_SCALES[type];
+  return FRUITS[type].radius * (Number.isFinite(scale) ? scale : 1);
+}
+
 function getMass(type) {
-  return Math.pow(FRUITS[type].radius / 16, 2.4);
+  const baseRadius = Math.max(1, getFruitRadius(0));
+  const ratio = getFruitRadius(type) / baseRadius;
+  const mass = 0.288 * Math.pow(ratio, 1.28);
+  return clamp(mass, 0.24, 3.28);
 }
 
 function getGravityScale(type) {
-  return lerp(0.84, 1.26, type / (FRUITS.length - 1));
+  return lerp(0.93, 1.05, type / (FRUITS.length - 1));
 }
-
 function getDropBounds(type) {
-  const radius = FRUITS[type].radius;
+  const radius = fruitHitboxBounds[type] * getFruitHitboxScale(type);
   return {
     min: WALL + radius,
     max: WIDTH - WALL - radius,
@@ -205,28 +538,599 @@ function updateChainUi() {
   if (!comboEl) return;
   comboEl.textContent = chainFrames > 0 && chainCount > 1 ? `CHAIN x${chainCount}` : 'READY';
 }
+function getFruitAssetImage(type) {
+  const image = fruitAssetImages[type];
+  if (!image || !image.complete || image.naturalWidth <= 0 || image.naturalHeight <= 0) return null;
+  return image;
+}
+
+function getSpriteCanvas(type, size) {
+  const px = Math.max(20, Math.round(size));
+  const key = `${type}:${px}`;
+  const cached = spriteCanvasCache.get(key);
+  if (cached) return cached;
+
+  const ratio = Math.max(1, window.devicePixelRatio || 1);
+  const sprite = document.createElement('canvas');
+  sprite.width = Math.max(1, Math.round(px * ratio));
+  sprite.height = Math.max(1, Math.round(px * ratio));
+
+  const sctx = sprite.getContext('2d');
+  sctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+
+  const image = getFruitAssetImage(type);
+  if (image) {
+    sctx.drawImage(image, 0, 0, px, px);
+  } else {
+    drawFruitSprite(sctx, type, px);
+  }
+
+  spriteCanvasCache.set(key, sprite);
+  return sprite;
+}
+
+function getSpriteDataUrl(type, size) {
+  const px = Math.max(20, Math.round(size));
+  const key = `${type}:${px}`;
+  const cached = spriteUrlCache.get(key);
+  if (cached) return cached;
+
+  const sprite = getSpriteCanvas(type, px);
+  const url = sprite.toDataURL('image/png');
+  spriteUrlCache.set(key, url);
+  return url;
+}
+
+function getFruitAssetUrl(type) {
+  return FRUIT_ASSET_PATHS[type] || '';
+}
+
+function getIconBackgroundSize(element) {
+  if (element.classList.contains('next-value')) return '80%';
+  if (element.classList.contains('preview-fruit')) return '98%';
+  return 'contain';
+}
+
+function applyFruitIcon(element, type, size) {
+  if (!element) return;
+
+  const assetUrl = getFruitAssetUrl(type);
+  const url = assetUrl || getSpriteDataUrl(type, size);
+  element.style.backgroundImage = `url("${url}")`;
+  element.style.backgroundRepeat = 'no-repeat';
+  element.style.backgroundPosition = 'center';
+  element.style.backgroundSize = getIconBackgroundSize(element);
+  element.textContent = '';
+}
+
+function drawCircleBase(sctx, radius, lightColor, darkColor, borderColor) {
+  const gradient = sctx.createRadialGradient(-radius * 0.36, -radius * 0.42, radius * 0.2, 0, 0, radius * 1.05);
+  gradient.addColorStop(0, lightColor);
+  gradient.addColorStop(1, darkColor);
+
+  sctx.beginPath();
+  sctx.arc(0, 0, radius, 0, TAU);
+  sctx.fillStyle = gradient;
+  sctx.fill();
+
+  sctx.lineWidth = Math.max(1.2, radius * 0.08);
+  sctx.strokeStyle = borderColor;
+  sctx.stroke();
+}
+
+function drawGloss(sctx, radius, alpha = 0.22) {
+  sctx.save();
+  sctx.globalAlpha = alpha;
+  sctx.fillStyle = '#ffffff';
+  sctx.beginPath();
+  sctx.ellipse(-radius * 0.33, -radius * 0.35, radius * 0.36, radius * 0.25, -0.38, 0, TAU);
+  sctx.fill();
+  sctx.restore();
+}
+
+function drawFace(sctx, radius, mood = 'smile', offsetY = 0, color = '#3b1d1a') {
+  const eyeR = Math.max(1.6, radius * 0.08);
+  const eyeY = -radius * 0.08 + offsetY;
+
+  sctx.save();
+  sctx.fillStyle = color;
+  sctx.beginPath();
+  sctx.arc(-radius * 0.24, eyeY, eyeR, 0, TAU);
+  sctx.arc(radius * 0.24, eyeY, eyeR, 0, TAU);
+  sctx.fill();
+
+  sctx.strokeStyle = color;
+  sctx.lineWidth = Math.max(1.5, radius * 0.1);
+  sctx.lineCap = 'round';
+  sctx.beginPath();
+
+  if (mood === 'flat') {
+    sctx.moveTo(-radius * 0.14, radius * 0.17 + offsetY);
+    sctx.lineTo(radius * 0.14, radius * 0.17 + offsetY);
+  } else if (mood === 'cat') {
+    sctx.moveTo(-radius * 0.13, radius * 0.15 + offsetY);
+    sctx.quadraticCurveTo(-radius * 0.05, radius * 0.3 + offsetY, 0, radius * 0.16 + offsetY);
+    sctx.quadraticCurveTo(radius * 0.05, radius * 0.3 + offsetY, radius * 0.13, radius * 0.15 + offsetY);
+  } else if (mood === 'happy') {
+    sctx.moveTo(-radius * 0.16, radius * 0.08 + offsetY);
+    sctx.quadraticCurveTo(0, radius * 0.31 + offsetY, radius * 0.16, radius * 0.08 + offsetY);
+  } else {
+    sctx.moveTo(-radius * 0.16, radius * 0.13 + offsetY);
+    sctx.quadraticCurveTo(0, radius * 0.25 + offsetY, radius * 0.16, radius * 0.13 + offsetY);
+  }
+
+  sctx.stroke();
+  sctx.restore();
+}
+
+function drawLeaf(sctx, x, y, width, height, angle, light, dark) {
+  sctx.save();
+  sctx.translate(x, y);
+  sctx.rotate(angle);
+
+  const gradient = sctx.createLinearGradient(0, -height / 2, 0, height / 2);
+  gradient.addColorStop(0, light);
+  gradient.addColorStop(1, dark);
+
+  sctx.beginPath();
+  sctx.moveTo(-width * 0.46, 0);
+  sctx.quadraticCurveTo(0, -height * 0.7, width * 0.46, 0);
+  sctx.quadraticCurveTo(0, height * 0.64, -width * 0.46, 0);
+  sctx.fillStyle = gradient;
+  sctx.fill();
+
+  sctx.strokeStyle = 'rgba(34, 106, 34, 0.5)';
+  sctx.lineWidth = Math.max(1, width * 0.08);
+  sctx.stroke();
+
+  sctx.restore();
+}
+function drawFruitSprite(sctx, type, size) {
+  const r = size * 0.48;
+  const faceColor = '#3a2017';
+
+  function clipCircle(clipR, drawInside) {
+    sctx.save();
+    sctx.beginPath();
+    sctx.arc(0, 0, clipR, 0, TAU);
+    sctx.clip();
+    drawInside();
+    sctx.restore();
+  }
+
+  function clipEllipse(rx, ry, oy, drawInside) {
+    sctx.save();
+    sctx.beginPath();
+    sctx.ellipse(0, oy, rx, ry, 0, 0, TAU);
+    sctx.clip();
+    drawInside();
+    sctx.restore();
+  }
+
+  function drawFaceRef({ y = 0, mood = 'cat', scale = 1, blush = false } = {}) {
+    const eyeX = r * 0.2 * scale;
+    const eyeY = y - r * 0.04 * scale;
+    const eyeR = Math.max(1.35, r * 0.062 * scale);
+
+    sctx.save();
+    sctx.fillStyle = faceColor;
+    sctx.beginPath();
+    sctx.arc(-eyeX, eyeY, eyeR, 0, TAU);
+    sctx.arc(eyeX, eyeY, eyeR, 0, TAU);
+    sctx.fill();
+
+    sctx.fillStyle = 'rgba(255,255,255,0.82)';
+    sctx.beginPath();
+    sctx.arc(-eyeX - eyeR * 0.24, eyeY - eyeR * 0.28, eyeR * 0.38, 0, TAU);
+    sctx.arc(eyeX - eyeR * 0.24, eyeY - eyeR * 0.28, eyeR * 0.38, 0, TAU);
+    sctx.fill();
+
+    if (blush) {
+      sctx.fillStyle = 'rgba(255, 150, 160, 0.26)';
+      sctx.beginPath();
+      sctx.ellipse(-r * 0.34 * scale, y + r * 0.09 * scale, r * 0.11 * scale, r * 0.07 * scale, 0, 0, TAU);
+      sctx.ellipse(r * 0.34 * scale, y + r * 0.09 * scale, r * 0.11 * scale, r * 0.07 * scale, 0, 0, TAU);
+      sctx.fill();
+    }
+
+    sctx.strokeStyle = faceColor;
+    sctx.lineWidth = Math.max(1.35, r * 0.062 * scale);
+    sctx.lineCap = 'round';
+    sctx.lineJoin = 'round';
+    sctx.beginPath();
+
+    if (mood === 'flat') {
+      sctx.moveTo(-r * 0.12 * scale, y + r * 0.1 * scale);
+      sctx.lineTo(r * 0.12 * scale, y + r * 0.1 * scale);
+    } else if (mood === 'tiny') {
+      sctx.arc(0, y + r * 0.1 * scale, r * 0.06 * scale, 0, Math.PI);
+    } else if (mood === 'smile') {
+      sctx.moveTo(-r * 0.12 * scale, y + r * 0.07 * scale);
+      sctx.quadraticCurveTo(0, y + r * 0.21 * scale, r * 0.12 * scale, y + r * 0.07 * scale);
+    } else {
+      sctx.moveTo(-r * 0.12 * scale, y + r * 0.07 * scale);
+      sctx.quadraticCurveTo(-r * 0.04 * scale, y + r * 0.2 * scale, 0, y + r * 0.11 * scale);
+      sctx.quadraticCurveTo(r * 0.04 * scale, y + r * 0.2 * scale, r * 0.12 * scale, y + r * 0.07 * scale);
+    }
+
+    sctx.stroke();
+    sctx.restore();
+  }
+
+  function drawBodyHighlight(alpha = 0.22, shiftX = -0.33, shiftY = -0.36, rx = 0.34, ry = 0.24) {
+    sctx.save();
+    sctx.globalAlpha = alpha;
+    sctx.fillStyle = '#ffffff';
+    sctx.beginPath();
+    sctx.ellipse(r * shiftX, r * shiftY, r * rx, r * ry, -0.3, 0, TAU);
+    sctx.fill();
+    sctx.restore();
+  }
+
+  function drawStrawberryPath() {
+    sctx.beginPath();
+    sctx.moveTo(0, -r * 0.76);
+    sctx.bezierCurveTo(r * 0.62, -r * 0.72, r * 0.8, -r * 0.1, r * 0.45, r * 0.5);
+    sctx.quadraticCurveTo(0, r * 0.9, -r * 0.45, r * 0.5);
+    sctx.bezierCurveTo(-r * 0.8, -r * 0.1, -r * 0.62, -r * 0.72, 0, -r * 0.76);
+    sctx.closePath();
+  }
+
+  function drawSeedDots(points, color, rx = r * 0.034, ry = r * 0.043) {
+    sctx.fillStyle = color;
+    for (const [x, y] of points) {
+      sctx.beginPath();
+      sctx.ellipse(x * r, y * r, rx, ry, 0.25, 0, TAU);
+      sctx.fill();
+    }
+  }
+
+  sctx.clearRect(0, 0, size, size);
+  sctx.save();
+  sctx.translate(size / 2, size / 2);
+
+  switch (FRUITS[type].skin) {
+    case 'cherry': {
+      drawCircleBase(sctx, r, '#ff9898', '#e33b3b', '#b72424');
+
+      sctx.strokeStyle = '#6d9338';
+      sctx.lineWidth = Math.max(1.8, r * 0.095);
+      sctx.lineCap = 'round';
+      sctx.beginPath();
+      sctx.moveTo(-r * 0.02, -r * 0.74);
+      sctx.quadraticCurveTo(r * 0.12, -r * 0.95, r * 0.3, -r * 0.86);
+      sctx.stroke();
+
+      drawLeaf(sctx, r * 0.3, -r * 0.84, r * 0.31, r * 0.19, 0.46, '#a8ea64', '#5cb535');
+      drawBodyHighlight(0.24, -0.36, -0.38, 0.33, 0.24);
+      drawFaceRef({ y: r * 0.05, mood: 'tiny', scale: 0.95 });
+      break;
+    }
+
+    case 'strawberry': {
+      const berryGrad = sctx.createRadialGradient(-r * 0.22, -r * 0.34, r * 0.16, 0, 0, r * 0.96);
+      berryGrad.addColorStop(0, '#ff9e86');
+      berryGrad.addColorStop(1, '#f43d34');
+
+      drawStrawberryPath();
+      sctx.fillStyle = berryGrad;
+      sctx.fill();
+      sctx.lineWidth = Math.max(1.25, r * 0.068);
+      sctx.strokeStyle = '#d62f2a';
+      sctx.stroke();
+
+      sctx.save();
+      drawStrawberryPath();
+      sctx.clip();
+      const seeds = [
+        [-0.28, -0.28], [-0.04, -0.31], [0.2, -0.25],
+        [-0.35, -0.08], [-0.16, -0.06], [0.04, -0.04], [0.24, -0.07],
+        [-0.31, 0.13], [-0.11, 0.15], [0.1, 0.16], [0.29, 0.12],
+        [-0.2, 0.35], [0.0, 0.38], [0.19, 0.34],
+      ];
+      drawSeedDots(seeds, '#ffe7a2', r * 0.026, r * 0.035);
+      sctx.restore();
+
+      drawLeaf(sctx, -r * 0.24, -r * 0.73, r * 0.2, r * 0.13, -0.6, '#a6e85f', '#56b532');
+      drawLeaf(sctx, -r * 0.08, -r * 0.77, r * 0.21, r * 0.14, -0.22, '#a6e85f', '#56b532');
+      drawLeaf(sctx, r * 0.08, -r * 0.77, r * 0.21, r * 0.14, 0.22, '#a6e85f', '#56b532');
+      drawLeaf(sctx, r * 0.24, -r * 0.73, r * 0.2, r * 0.13, 0.6, '#a6e85f', '#56b532');
+
+      drawBodyHighlight(0.16, -0.29, -0.34, 0.24, 0.18);
+      drawFaceRef({ y: r * 0.12, mood: 'smile', scale: 0.9, blush: true });
+      break;
+    }
+
+    case 'grape': {
+      drawCircleBase(sctx, r, '#ccbaff', '#7c58df', '#5f43bf');
+
+      clipCircle(r * 0.95, () => {
+        const clusters = [
+          [-0.2, -0.22], [0, -0.25], [0.2, -0.22],
+          [-0.3, -0.02], [-0.1, 0.0], [0.1, 0.0], [0.3, -0.02],
+          [-0.2, 0.2], [0, 0.22], [0.2, 0.2],
+        ];
+
+        for (const [x, y] of clusters) {
+          const gx = x * r;
+          const gy = y * r;
+          const bubbleR = r * 0.17;
+          const grad = sctx.createRadialGradient(
+            gx - bubbleR * 0.34,
+            gy - bubbleR * 0.38,
+            bubbleR * 0.18,
+            gx,
+            gy,
+            bubbleR,
+          );
+          grad.addColorStop(0, '#e4d9ff');
+          grad.addColorStop(1, '#8462e4');
+
+          sctx.fillStyle = grad;
+          sctx.beginPath();
+          sctx.arc(gx, gy, bubbleR, 0, TAU);
+          sctx.fill();
+
+          sctx.strokeStyle = '#6a49c8';
+          sctx.lineWidth = Math.max(0.9, r * 0.045);
+          sctx.stroke();
+        }
+      });
+
+      drawLeaf(sctx, 0, -r * 0.8, r * 0.3, r * 0.18, 0, '#a8ea64', '#56b332');
+      drawBodyHighlight(0.12, -0.28, -0.32, 0.25, 0.19);
+      drawFaceRef({ y: r * 0.1, mood: 'tiny', scale: 0.92 });
+      break;
+    }
+
+    case 'dekopon': {
+      drawCircleBase(sctx, r, '#ffd98d', '#f39f2a', '#ca7b17');
+
+      sctx.fillStyle = '#f4b13a';
+      sctx.beginPath();
+      sctx.arc(0, -r * 0.67, r * 0.16, 0, TAU);
+      sctx.fill();
+      sctx.strokeStyle = '#cf8523';
+      sctx.lineWidth = Math.max(1.1, r * 0.06);
+      sctx.stroke();
+
+      drawLeaf(sctx, r * 0.09, -r * 0.82, r * 0.33, r * 0.2, 0.2, '#a8ea64', '#56b332');
+      drawBodyHighlight(0.2, -0.33, -0.35, 0.33, 0.23);
+      drawFaceRef({ y: r * 0.05, mood: 'smile', scale: 0.94 });
+      break;
+    }
+
+    case 'persimmon': {
+      drawCircleBase(sctx, r, '#ffc26b', '#ef8322', '#c86317');
+
+      for (let i = 0; i < 4; i += 1) {
+        const angle = (i * Math.PI) / 2 + 0.25;
+        drawLeaf(
+          sctx,
+          Math.cos(angle) * r * 0.12,
+          -r * 0.63 + Math.sin(angle) * r * 0.05,
+          r * 0.3,
+          r * 0.19,
+          angle,
+          '#a8ea64',
+          '#56b332',
+        );
+      }
+
+      drawBodyHighlight(0.18, -0.32, -0.34, 0.31, 0.22);
+      drawFaceRef({ y: r * 0.05, mood: 'cat', scale: 0.92 });
+      break;
+    }
+
+    case 'apple': {
+      drawCircleBase(sctx, r, '#ff9ea0', '#d9363b', '#a92022');
+
+      sctx.strokeStyle = '#7c6538';
+      sctx.lineWidth = Math.max(1.9, r * 0.1);
+      sctx.lineCap = 'round';
+      sctx.beginPath();
+      sctx.moveTo(0, -r * 0.72);
+      sctx.lineTo(r * 0.04, -r * 0.92);
+      sctx.stroke();
+
+      drawLeaf(sctx, r * 0.22, -r * 0.83, r * 0.33, r * 0.21, 0.56, '#a8ea64', '#56b332');
+      drawBodyHighlight(0.2, -0.33, -0.36, 0.34, 0.24);
+      drawFaceRef({ y: r * 0.06, mood: 'smile' });
+      break;
+    }
+
+    case 'pear': {
+      const pearGrad = sctx.createRadialGradient(-r * 0.27, -r * 0.35, r * 0.16, 0, 0, r * 1.05);
+      pearGrad.addColorStop(0, '#fff7b2');
+      pearGrad.addColorStop(1, '#d2bd43');
+
+      sctx.beginPath();
+      sctx.moveTo(0, -r * 0.95);
+      sctx.bezierCurveTo(r * 0.51, -r * 0.84, r * 0.82, -r * 0.2, r * 0.72, r * 0.33);
+      sctx.bezierCurveTo(r * 0.56, r * 0.88, r * 0.2, r * 0.95, 0, r * 0.92);
+      sctx.bezierCurveTo(-r * 0.2, r * 0.95, -r * 0.56, r * 0.88, -r * 0.72, r * 0.33);
+      sctx.bezierCurveTo(-r * 0.82, -r * 0.2, -r * 0.51, -r * 0.84, 0, -r * 0.95);
+      sctx.fillStyle = pearGrad;
+      sctx.fill();
+      sctx.lineWidth = Math.max(1.3, r * 0.075);
+      sctx.strokeStyle = '#b59f30';
+      sctx.stroke();
+
+      sctx.strokeStyle = '#7d6739';
+      sctx.lineWidth = Math.max(1.8, r * 0.09);
+      sctx.lineCap = 'round';
+      sctx.beginPath();
+      sctx.moveTo(0, -r * 0.9);
+      sctx.lineTo(r * 0.04, -r * 1.0);
+      sctx.stroke();
+
+      drawBodyHighlight(0.16, -0.32, -0.37, 0.3, 0.22);
+      drawFaceRef({ y: r * 0.16, mood: 'tiny', scale: 0.95 });
+      break;
+    }
+
+    case 'peach': {
+      drawCircleBase(sctx, r, '#ffd9c7', '#f3a28f', '#d97965');
+
+      sctx.strokeStyle = 'rgba(205, 120, 111, 0.6)';
+      sctx.lineWidth = Math.max(1.3, r * 0.07);
+      sctx.lineCap = 'round';
+      sctx.beginPath();
+      sctx.moveTo(0, -r * 0.68);
+      sctx.bezierCurveTo(-r * 0.13, -r * 0.1, -r * 0.09, r * 0.34, 0, r * 0.72);
+      sctx.stroke();
+
+      drawBodyHighlight(0.26, -0.31, -0.3, 0.36, 0.27);
+      drawFaceRef({ y: r * 0.08, mood: 'cat', blush: true });
+      break;
+    }
+
+    case 'pineapple': {
+      const bodyRX = r * 0.9;
+      const bodyRY = r * 0.88;
+      const bodyY = r * 0.08;
+
+      const pineGrad = sctx.createRadialGradient(-bodyRX * 0.34, bodyY - bodyRY * 0.45, bodyRY * 0.18, 0, bodyY, bodyRY * 1.1);
+      pineGrad.addColorStop(0, '#ffe98f');
+      pineGrad.addColorStop(1, '#f0c627');
+
+      sctx.beginPath();
+      sctx.ellipse(0, bodyY, bodyRX, bodyRY, 0, 0, TAU);
+      sctx.fillStyle = pineGrad;
+      sctx.fill();
+      sctx.lineWidth = Math.max(1.5, r * 0.08);
+      sctx.strokeStyle = '#d4a81e';
+      sctx.stroke();
+
+      clipEllipse(bodyRX * 0.95, bodyRY * 0.95, bodyY, () => {
+        sctx.strokeStyle = 'rgba(188, 129, 20, 0.45)';
+        sctx.lineWidth = Math.max(1.05, r * 0.05);
+        for (let i = -4; i <= 4; i += 1) {
+          const offset = i * r * 0.23;
+          sctx.beginPath();
+          sctx.moveTo(-bodyRX * 1.2, bodyY + offset - bodyRY * 0.18);
+          sctx.lineTo(bodyRX * 1.2, bodyY + offset + bodyRY * 0.72);
+          sctx.stroke();
+
+          sctx.beginPath();
+          sctx.moveTo(-bodyRX * 1.2, bodyY + offset + bodyRY * 0.72);
+          sctx.lineTo(bodyRX * 1.2, bodyY + offset - bodyRY * 0.18);
+          sctx.stroke();
+        }
+      });
+
+      drawLeaf(sctx, -r * 0.28, -r * 0.7, r * 0.24, r * 0.35, -0.75, '#acef6a', '#5fb93b');
+      drawLeaf(sctx, -r * 0.08, -r * 0.76, r * 0.24, r * 0.4, -0.32, '#acef6a', '#5fb93b');
+      drawLeaf(sctx, r * 0.08, -r * 0.76, r * 0.24, r * 0.4, 0.32, '#acef6a', '#5fb93b');
+      drawLeaf(sctx, r * 0.28, -r * 0.7, r * 0.24, r * 0.35, 0.75, '#acef6a', '#5fb93b');
+
+      drawBodyHighlight(0.1, -0.24, -0.24, 0.25, 0.18);
+      drawFaceRef({ y: bodyY + r * 0.05, mood: 'cat', scale: 0.92 });
+      break;
+    }
+
+    case 'melon': {
+      drawCircleBase(sctx, r, '#c1f39d', '#77c860', '#4e9f41');
+
+      clipCircle(r * 0.93, () => {
+        sctx.strokeStyle = 'rgba(84, 145, 65, 0.42)';
+        sctx.lineWidth = Math.max(1.05, r * 0.05);
+        for (let i = -3; i <= 3; i += 1) {
+          const d = i * r * 0.22;
+          sctx.beginPath();
+          sctx.moveTo(-r * 0.9, d);
+          sctx.quadraticCurveTo(0, d + r * (i % 2 === 0 ? 0.13 : -0.13), r * 0.9, d);
+          sctx.stroke();
+        }
+
+        for (let i = -2; i <= 2; i += 1) {
+          const x = i * r * 0.24;
+          sctx.beginPath();
+          sctx.moveTo(x, -r * 0.9);
+          sctx.quadraticCurveTo(x + r * 0.17, -r * 0.36, x, r * 0.06);
+          sctx.quadraticCurveTo(x - r * 0.17, r * 0.5, x, r * 0.92);
+          sctx.stroke();
+        }
+      });
+
+      sctx.strokeStyle = '#5c8c3f';
+      sctx.lineWidth = Math.max(1.2, r * 0.055);
+      sctx.lineCap = 'round';
+      sctx.beginPath();
+      sctx.moveTo(r * 0.07, -r * 0.78);
+      sctx.lineTo(r * 0.14, -r * 0.87);
+      sctx.stroke();
+
+      drawBodyHighlight(0.17, -0.33, -0.35, 0.32, 0.22);
+      drawFaceRef({ y: r * 0.05, mood: 'smile' });
+      break;
+    }
+
+    case 'watermelon':
+    default: {
+      drawCircleBase(sctx, r, '#7bdd76', '#319543', '#216d2e');
+
+      clipCircle(r * 0.94, () => {
+        sctx.strokeStyle = 'rgba(29, 106, 42, 0.52)';
+        sctx.lineWidth = Math.max(1.6, r * 0.11);
+        for (let i = -2; i <= 2; i += 1) {
+          const x = i * r * 0.36;
+          sctx.beginPath();
+          sctx.moveTo(x - r * 0.15, -r * 0.95);
+          sctx.quadraticCurveTo(x + r * 0.22, 0, x - r * 0.15, r * 0.95);
+          sctx.stroke();
+        }
+      });
+
+      drawBodyHighlight(0.15, -0.33, -0.36, 0.32, 0.22);
+      drawFaceRef({ y: r * 0.05, mood: 'cat' });
+      break;
+    }
+  }
+
+  sctx.restore();
+}
+function buildFruitLegend() {
+  if (!fruitLegendEl) return;
+
+  fruitLegendEl.innerHTML = '';
+  FRUITS.forEach((fruit, index) => {
+    const item = document.createElement('div');
+    item.className = 'legend-item';
+
+    const icon = document.createElement('span');
+    icon.className = 'legend-icon';
+    applyFruitIcon(icon, index, 40);
+
+    const main = document.createElement('span');
+    main.className = 'legend-main';
+    main.textContent = `${index + 1}. ${fruit.label}`;
+
+    item.append(icon, main);
+    fruitLegendEl.append(item);
+  });
+}
 
 function updatePreviewVisual() {
   const meta = FRUITS[currentType];
   const canvasContent = getCanvasContentRect();
   const scale = canvasContent.width / WIDTH;
-  const size = clamp(meta.radius * 2 * scale, 24, 88);
+  const size = clamp(getFruitRadius(currentType) * 2 * scale * getFruitRenderScale(currentType), 24, 88);
 
   previewFruitEl.style.width = `${size}px`;
   previewFruitEl.style.height = `${size}px`;
-  previewFruitEl.style.fontSize = `${Math.max(16, size * 0.62)}px`;
-  previewFruitEl.style.background = meta.color;
-  previewFruitEl.style.boxShadow =
-    `inset 0 ${Math.max(4, size * 0.22)}px ${Math.max(8, size * 0.35)}px rgba(255,255,255,0.24), ` +
-    '0 6px 12px rgba(0,0,0,0.2)';
+  previewFruitEl.style.border = '0';
+  previewFruitEl.style.borderRadius = '0';
+  previewFruitEl.style.backgroundColor = 'transparent';
+  previewFruitEl.style.boxShadow = 'none';
+
+  applyFruitIcon(previewFruitEl, currentType, size * 1.35);
 }
 
 function updatePreview() {
-  previewFruitEl.textContent = FRUITS[currentType].emoji;
-  nextFruitEl.textContent = FRUITS[nextType].emoji;
+  applyFruitIcon(nextFruitEl, nextType, 128);
   updatePreviewVisual();
 }
-
 function updatePreviewPosition() {
   const shellRect = boardShell.getBoundingClientRect();
   const canvasContent = getCanvasContentRect();
@@ -236,16 +1140,497 @@ function updatePreviewPosition() {
   cloudEl.style.left = `${left}px`;
 }
 
+
+function normalizeEditorCircle(circle) {
+  return {
+    x: clamp(Number.isFinite(circle?.x) ? circle.x : 0, -1.4, 1.4),
+    y: clamp(Number.isFinite(circle?.y) ? circle.y : 0, -1.4, 1.4),
+    r: clamp(Number.isFinite(circle?.r) ? circle.r : 0.12, 0.05, 1.4),
+  };
+}
+
+function getHitboxEditorTemplate(type = hitboxEditor.type) {
+  const template = FRUIT_MANUAL_HITBOX_TEMPLATES[type];
+  return Array.isArray(template) ? template : [];
+}
+
+function applyHitboxTemplateChanges(type) {
+  updateFruitHitbox(type);
+  refreshFruitGeometries();
+  syncPointerToCurrentType();
+  updatePreviewPosition();
+}
+
+function applyAllHitboxTemplateChanges() {
+  for (let i = 0; i < FRUITS.length; i += 1) {
+    updateFruitHitbox(i);
+  }
+  refreshFruitGeometries();
+  syncPointerToCurrentType();
+  updatePreviewPosition();
+}
+
+function serializeHitboxEditorConfig() {
+  return {
+    templates: FRUIT_MANUAL_HITBOX_TEMPLATES.map((template) => template.map((circle) => normalizeEditorCircle(circle))),
+    expansions: FRUIT_HITBOX_EXPANSION.map((value) => (Number.isFinite(value) ? value : 1)),
+  };
+}
+
+function saveHitboxEditorConfig() {
+  try {
+    localStorage.setItem(HITBOX_EDITOR_STORAGE_KEY, JSON.stringify(serializeHitboxEditorConfig()));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function loadHitboxEditorConfig() {
+  let parsed;
+  try {
+    const raw = localStorage.getItem(HITBOX_EDITOR_STORAGE_KEY);
+    if (!raw) return false;
+    parsed = JSON.parse(raw);
+  } catch {
+    return false;
+  }
+
+  let changed = false;
+  if (Array.isArray(parsed?.templates) && parsed.templates.length === FRUITS.length) {
+    for (let i = 0; i < FRUITS.length; i += 1) {
+      const template = parsed.templates[i];
+      if (!Array.isArray(template) || template.length === 0) continue;
+      const sanitized = template.map((circle) => normalizeEditorCircle(circle));
+      FRUIT_MANUAL_HITBOX_TEMPLATES[i].splice(0, FRUIT_MANUAL_HITBOX_TEMPLATES[i].length, ...sanitized);
+      changed = true;
+    }
+  }
+
+  if (Array.isArray(parsed?.expansions) && parsed.expansions.length === FRUITS.length) {
+    for (let i = 0; i < FRUITS.length; i += 1) {
+      const value = parsed.expansions[i];
+      if (!Number.isFinite(value)) continue;
+      FRUIT_HITBOX_EXPANSION[i] = clamp(value, 0.6, 2.2);
+      changed = true;
+    }
+  }
+
+  if (changed) applyAllHitboxTemplateChanges();
+  return changed;
+}
+
+function getCanvasPoint(clientX, clientY) {
+  const canvasContent = getCanvasContentRect();
+  if (canvasContent.width === 0 || canvasContent.height === 0) return null;
+
+  return {
+    x: ((clientX - canvasContent.left) / canvasContent.width) * WIDTH,
+    y: ((clientY - canvasContent.top) / canvasContent.height) * HEIGHT,
+  };
+}
+
+function isPointInsideEditorPanel(x, y) {
+  const panel = HITBOX_EDITOR_PANEL;
+  return x >= panel.x && x <= panel.x + panel.w && y >= panel.y && y <= panel.y + panel.h;
+}
+
+function getHitboxEditorScale(type = hitboxEditor.type) {
+  return HITBOX_EDITOR_PANEL.r * getFruitHitboxExpansion(type);
+}
+
+function getHitboxEditorCircleMetrics(circle, type = hitboxEditor.type) {
+  const panel = HITBOX_EDITOR_PANEL;
+  const scale = getHitboxEditorScale(type);
+  const cx = panel.cx + (circle.x * scale);
+  const cy = panel.cy + (circle.y * scale);
+  const cr = circle.r * scale;
+  return { cx, cy, cr, scale };
+}
+
+function pickHitboxEditorCircle(x, y) {
+  const template = getHitboxEditorTemplate();
+  let best = null;
+
+  for (let i = template.length - 1; i >= 0; i -= 1) {
+    const circle = template[i];
+    const { cx, cy, cr } = getHitboxEditorCircleMetrics(circle);
+    const dist = Math.hypot(x - cx, y - cy);
+    const handleDist = Math.hypot(x - (cx + cr), y - cy);
+
+    if (handleDist <= 9) {
+      return { index: i, mode: 'resize', cx, cy, cr };
+    }
+
+    if (dist <= cr + 7) {
+      if (!best || dist < best.dist) {
+        best = { index: i, mode: 'move', cx, cy, cr, dist };
+      }
+    }
+  }
+
+  return best;
+}
+
+function addHitboxEditorCircleAt(x, y) {
+  const template = getHitboxEditorTemplate();
+  const panel = HITBOX_EDITOR_PANEL;
+  const scale = getHitboxEditorScale();
+  const circle = normalizeEditorCircle({
+    x: (x - panel.cx) / scale,
+    y: (y - panel.cy) / scale,
+    r: 0.12,
+  });
+
+  template.push(circle);
+  hitboxEditor.selectedCircle = template.length - 1;
+  applyHitboxTemplateChanges(hitboxEditor.type);
+}
+
+function removeSelectedHitboxEditorCircle() {
+  const template = getHitboxEditorTemplate();
+  if (hitboxEditor.selectedCircle < 0 || hitboxEditor.selectedCircle >= template.length) return false;
+
+  template.splice(hitboxEditor.selectedCircle, 1);
+  hitboxEditor.selectedCircle = Math.min(hitboxEditor.selectedCircle, template.length - 1);
+  if (template.length === 0) hitboxEditor.selectedCircle = -1;
+  applyHitboxTemplateChanges(hitboxEditor.type);
+  return true;
+}
+
+function moveSelectedHitboxEditorCircle(dx, dy) {
+  const template = getHitboxEditorTemplate();
+  const circle = template[hitboxEditor.selectedCircle];
+  if (!circle) return false;
+
+  circle.x = clamp(circle.x + dx, -1.4, 1.4);
+  circle.y = clamp(circle.y + dy, -1.4, 1.4);
+  applyHitboxTemplateChanges(hitboxEditor.type);
+  return true;
+}
+
+function resizeSelectedHitboxEditorCircle(delta) {
+  const template = getHitboxEditorTemplate();
+  const circle = template[hitboxEditor.selectedCircle];
+  if (!circle) return false;
+
+  circle.r = clamp(circle.r + delta, 0.05, 1.4);
+  applyHitboxTemplateChanges(hitboxEditor.type);
+  return true;
+}
+
+function changeHitboxEditorType(delta) {
+  const total = FRUITS.length;
+  hitboxEditor.type = (hitboxEditor.type + delta + total) % total;
+  hitboxEditor.selectedCircle = -1;
+}
+
+function toggleHitboxEditor(enabled = !hitboxEditor.enabled) {
+  hitboxEditor.enabled = enabled;
+  hitboxEditor.dragging = false;
+  hitboxEditor.pointerId = null;
+
+  if (enabled) {
+    hitboxEditor.type = currentType;
+    hitboxEditor.selectedCircle = -1;
+  }
+}
+
+function handleHitboxEditorPointerDown(event) {
+  if (!hitboxEditor.enabled) return;
+  if (event.pointerType === 'mouse' && event.button !== 0) return;
+
+  const point = getCanvasPoint(event.clientX, event.clientY);
+  if (!point || !isPointInsideEditorPanel(point.x, point.y)) return;
+
+  event.preventDefault();
+  const pick = pickHitboxEditorCircle(point.x, point.y);
+
+  if (!pick) {
+    addHitboxEditorCircleAt(point.x, point.y);
+    const template = getHitboxEditorTemplate();
+    const circle = template[hitboxEditor.selectedCircle];
+    const metrics = circle ? getHitboxEditorCircleMetrics(circle) : null;
+    if (!metrics) return;
+
+    hitboxEditor.dragging = true;
+    hitboxEditor.dragMode = 'move';
+    hitboxEditor.pointerId = event.pointerId;
+    hitboxEditor.dragOffsetX = point.x - metrics.cx;
+    hitboxEditor.dragOffsetY = point.y - metrics.cy;
+    return;
+  }
+
+  hitboxEditor.selectedCircle = pick.index;
+  hitboxEditor.dragging = true;
+  hitboxEditor.dragMode = pick.mode;
+  hitboxEditor.pointerId = event.pointerId;
+
+  if (pick.mode === 'move') {
+    hitboxEditor.dragOffsetX = point.x - pick.cx;
+    hitboxEditor.dragOffsetY = point.y - pick.cy;
+  } else {
+    hitboxEditor.dragOffsetX = 0;
+    hitboxEditor.dragOffsetY = 0;
+  }
+
+  try {
+    canvas.setPointerCapture(event.pointerId);
+  } catch {
+    // Ignore capture failures.
+  }
+}
+
+function handleHitboxEditorPointerMove(event) {
+  if (!hitboxEditor.enabled) return;
+  if (!hitboxEditor.dragging) return;
+  if (hitboxEditor.pointerId !== null && event.pointerId !== hitboxEditor.pointerId) return;
+
+  const point = getCanvasPoint(event.clientX, event.clientY);
+  if (!point) return;
+
+  const template = getHitboxEditorTemplate();
+  const circle = template[hitboxEditor.selectedCircle];
+  if (!circle) return;
+
+  event.preventDefault();
+
+  if (hitboxEditor.dragMode === 'resize') {
+    const metrics = getHitboxEditorCircleMetrics(circle);
+    const distance = Math.hypot(point.x - metrics.cx, point.y - metrics.cy);
+    circle.r = clamp(distance / metrics.scale, 0.05, 1.4);
+  } else {
+    const panel = HITBOX_EDITOR_PANEL;
+    const scale = getHitboxEditorScale();
+    circle.x = clamp((point.x - panel.cx - hitboxEditor.dragOffsetX) / scale, -1.4, 1.4);
+    circle.y = clamp((point.y - panel.cy - hitboxEditor.dragOffsetY) / scale, -1.4, 1.4);
+  }
+
+  applyHitboxTemplateChanges(hitboxEditor.type);
+}
+
+function handleHitboxEditorPointerUp(event) {
+  if (!hitboxEditor.enabled) return;
+  if (!hitboxEditor.dragging) return;
+  if (hitboxEditor.pointerId !== null && event.pointerId !== hitboxEditor.pointerId) return;
+
+  hitboxEditor.dragging = false;
+  hitboxEditor.pointerId = null;
+}
+
+function handleHitboxEditorContextMenu(event) {
+  if (!hitboxEditor.enabled) return;
+
+  const point = getCanvasPoint(event.clientX, event.clientY);
+  if (!point || !isPointInsideEditorPanel(point.x, point.y)) return;
+
+  const pick = pickHitboxEditorCircle(point.x, point.y);
+  if (!pick) return;
+
+  event.preventDefault();
+  hitboxEditor.selectedCircle = pick.index;
+  removeSelectedHitboxEditorCircle();
+}
+
+function drawFruitHitboxOverlay() {
+  ctx.save();
+  ctx.lineWidth = 1.25;
+
+  for (const fruit of fruits) {
+    if (fruit.remove) continue;
+
+    const hitbox = fruit.hitbox || getFruitHitboxTemplate(fruit.type);
+    const scale = fruit.hitboxScale || getFruitHitboxScale(fruit.type, fruit.r);
+    const cos = Math.cos(fruit.angle);
+    const sin = Math.sin(fruit.angle);
+
+    for (const circle of hitbox) {
+      const ox = circle.x * scale;
+      const oy = circle.y * scale;
+      const cx = fruit.x + (ox * cos) - (oy * sin);
+      const cy = fruit.y + (ox * sin) + (oy * cos);
+      const cr = circle.r * scale;
+
+      ctx.beginPath();
+      ctx.arc(cx, cy, cr, 0, TAU);
+      ctx.strokeStyle = fruit.type === hitboxEditor.type
+        ? 'rgba(100, 255, 190, 0.85)'
+        : 'rgba(255, 255, 255, 0.36)';
+      ctx.stroke();
+    }
+  }
+
+  ctx.restore();
+}
+
+function drawHitboxEditorPanel() {
+  const panel = HITBOX_EDITOR_PANEL;
+  const type = hitboxEditor.type;
+  const template = getHitboxEditorTemplate(type);
+
+  ctx.save();
+  ctx.fillStyle = 'rgba(24, 14, 6, 0.78)';
+  ctx.fillRect(panel.x, panel.y, panel.w, panel.h);
+  ctx.strokeStyle = 'rgba(255, 234, 188, 0.75)';
+  ctx.lineWidth = 2;
+  ctx.strokeRect(panel.x + 0.5, panel.y + 0.5, panel.w - 1, panel.h - 1);
+
+  ctx.fillStyle = '#fff4d9';
+  ctx.font = 'bold 12px sans-serif';
+  ctx.fillText('Hitbox Editor (H / F2)', panel.x + 10, panel.y + 18);
+  ctx.font = '12px sans-serif';
+  ctx.fillText('Fruit: ' + FRUITS[type].label + ' [' + (type + 1) + ' / ' + FRUITS.length + ']', panel.x + 10, panel.y + 34);
+  ctx.fillText('Drag: move  |  Drag right handle: resize', panel.x + 10, panel.y + 50);
+  ctx.fillText('Click empty: add  |  Right-click: remove', panel.x + 10, panel.y + 66);
+  ctx.fillText('[ ] switch  S save  L load  Del remove', panel.x + 10, panel.y + 82);
+
+  const spriteSize = panel.r * 2;
+  const sprite = getSpriteCanvas(type, spriteSize);
+  ctx.drawImage(sprite, panel.cx - (spriteSize / 2), panel.cy - (spriteSize / 2), spriteSize, spriteSize);
+
+  for (let i = 0; i < template.length; i += 1) {
+    const circle = template[i];
+    const { cx, cy, cr } = getHitboxEditorCircleMetrics(circle, type);
+    const selected = i === hitboxEditor.selectedCircle;
+
+    ctx.beginPath();
+    ctx.arc(cx, cy, cr, 0, TAU);
+    ctx.fillStyle = selected ? 'rgba(110, 255, 188, 0.16)' : 'rgba(255, 180, 95, 0.12)';
+    ctx.fill();
+    ctx.strokeStyle = selected ? 'rgba(110, 255, 188, 0.95)' : 'rgba(255, 210, 140, 0.88)';
+    ctx.lineWidth = selected ? 2.2 : 1.4;
+    ctx.stroke();
+
+    ctx.beginPath();
+    ctx.arc(cx + cr, cy, selected ? 4.5 : 3.5, 0, TAU);
+    ctx.fillStyle = selected ? 'rgba(110, 255, 188, 0.95)' : 'rgba(255, 230, 190, 0.8)';
+    ctx.fill();
+
+    ctx.fillStyle = selected ? '#9dffe0' : '#ffdcb0';
+    ctx.font = '10px sans-serif';
+    ctx.fillText(String(i + 1), cx - 3, cy + 3);
+  }
+
+  ctx.restore();
+}
+
+function handleHitboxEditorKeydown(event) {
+  const key = (event.key || '').toLowerCase();
+  const editorToggle = key === 'h' || event.code === 'F2';
+
+  if (!hitboxEditor.enabled && !editorToggle) return false;
+
+  if (editorToggle) {
+    event.preventDefault();
+    toggleHitboxEditor();
+    return true;
+  }
+
+  if (!hitboxEditor.enabled) return false;
+
+  const moveStep = event.shiftKey ? 0.03 : 0.012;
+  const resizeStep = event.shiftKey ? 0.03 : 0.012;
+
+  if (event.key === '[' || event.key === '{') {
+    event.preventDefault();
+    changeHitboxEditorType(-1);
+    return true;
+  }
+
+  if (event.key === ']' || event.key === '}') {
+    event.preventDefault();
+    changeHitboxEditorType(1);
+    return true;
+  }
+
+  if (key === 'escape') {
+    event.preventDefault();
+    toggleHitboxEditor(false);
+    return true;
+  }
+
+  if (key === 's') {
+    event.preventDefault();
+    saveHitboxEditorConfig();
+    return true;
+  }
+
+  if (key === 'l') {
+    event.preventDefault();
+    loadHitboxEditorConfig();
+    return true;
+  }
+
+  if (key === 'n') {
+    event.preventDefault();
+    addHitboxEditorCircleAt(HITBOX_EDITOR_PANEL.cx, HITBOX_EDITOR_PANEL.cy);
+    return true;
+  }
+
+  if (event.key === 'Delete' || event.key === 'Backspace') {
+    event.preventDefault();
+    removeSelectedHitboxEditorCircle();
+    return true;
+  }
+
+  if (event.key === 'ArrowLeft') {
+    event.preventDefault();
+    moveSelectedHitboxEditorCircle(-moveStep, 0);
+    return true;
+  }
+
+  if (event.key === 'ArrowRight') {
+    event.preventDefault();
+    moveSelectedHitboxEditorCircle(moveStep, 0);
+    return true;
+  }
+
+  if (event.key === 'ArrowUp') {
+    event.preventDefault();
+    moveSelectedHitboxEditorCircle(0, -moveStep);
+    return true;
+  }
+
+  if (event.key === 'ArrowDown') {
+    event.preventDefault();
+    moveSelectedHitboxEditorCircle(0, moveStep);
+    return true;
+  }
+
+  if (event.key === '+' || event.key === '=') {
+    event.preventDefault();
+    resizeSelectedHitboxEditorCircle(resizeStep);
+    return true;
+  }
+
+  if (event.key === '-' || event.key === '_') {
+    event.preventDefault();
+    resizeSelectedHitboxEditorCircle(-resizeStep);
+    return true;
+  }
+
+  if (/^[1-9]$/.test(event.key)) {
+    event.preventDefault();
+    const index = Number.parseInt(event.key, 10) - 1;
+    const template = getHitboxEditorTemplate();
+    hitboxEditor.selectedCircle = index < template.length ? index : hitboxEditor.selectedCircle;
+    return true;
+  }
+
+  event.preventDefault();
+  return true;
+}
+
 function createFruit(type, x, y = SPAWN_Y) {
   const bounds = getDropBounds(type);
-  return {
+  const fruit = {
     id: fruitId++,
     type,
     x: clamp(x, bounds.min, bounds.max),
     y,
     vx: 0,
     vy: 0,
-    r: FRUITS[type].radius,
+    r: getFruitRadius(type),
     mass: getMass(type),
     gravityScale: getGravityScale(type),
     angle: 0,
@@ -253,11 +1638,23 @@ function createFruit(type, x, y = SPAWN_Y) {
     bornFrame: frameCount,
     mergeCooldown: 8,
     remove: false,
+    hitbox: DEFAULT_HITBOX_TEMPLATE,
+    hitboxScale: 0,
+    boundR: getFruitRadius(type),
   };
+
+  updateFruitGeometry(fruit);
+  return fruit;
 }
 
 function spawnFruit() {
-  if (gameOver || !canDrop) return;
+  const now = getNow();
+  if (gameOver || !canDrop) return false;
+  if (now - lastDropAt < DROP_DEBOUNCE_MS) return false;
+
+  // Lock immediately so a duplicate event in the same tick cannot double-spawn.
+  canDrop = false;
+  lastDropAt = now;
 
   syncPointerToCurrentType();
   const fruit = createFruit(currentType, pointerX, SPAWN_Y);
@@ -273,6 +1670,7 @@ function spawnFruit() {
   chainFrames = 0;
   updateChainUi();
   startDropCooldown();
+  return true;
 }
 
 function addScore(value) {
@@ -305,14 +1703,26 @@ function addBurst(x, y, color, power = 1) {
 
 function mergeFruits(a, b, spawnedFruits) {
   if (a.remove || b.remove) return false;
-  if (a.type !== b.type || a.type >= FRUITS.length - 1) return false;
+  if (a.type !== b.type) return false;
   if (a.mergeCooldown > 0 || b.mergeCooldown > 0) return false;
 
+  const centerX = (a.x + b.x) / 2;
+  const centerY = (a.y + b.y) / 2;
   a.remove = true;
   b.remove = true;
 
+  const isWatermelon = a.type === FRUITS.length - 1;
+  if (isWatermelon) {
+    chainCount += 1;
+    chainFrames = 50;
+    updateChainUi();
+    addScore(WATERMELON_CLEAR_SCORE);
+    addBurst(centerX, centerY, '#55c566', 3.8);
+    return true;
+  }
+
   const next = a.type + 1;
-  const merged = createFruit(next, (a.x + b.x) / 2, (a.y + b.y) / 2);
+  const merged = createFruit(next, centerX, centerY);
   merged.vx = (a.vx + b.vx) * 0.18;
   merged.vy = Math.min(a.vy, b.vy) - lerp(0.65, 1.1, next / (FRUITS.length - 1));
   merged.angle = (a.angle + b.angle) * 0.5;
@@ -322,65 +1732,140 @@ function mergeFruits(a, b, spawnedFruits) {
 
   chainCount += 1;
   chainFrames = 40;
+  updateChainUi();
   addScore(FRUITS[next].score);
   addBurst(merged.x, merged.y, FRUITS[next].color, merged.r / 30);
   return true;
 }
-
 function solveCollision(a, b, spawnedFruits) {
   if (a.remove || b.remove) return;
 
-  const dx = b.x - a.x;
-  const dy = b.y - a.y;
-  let dist = Math.hypot(dx, dy);
-  const minDist = a.r + b.r;
+  const dxCenter = b.x - a.x;
+  const dyCenter = b.y - a.y;
+  const maxCenterDist = (a.boundR || a.r) + (b.boundR || b.r);
+  if ((dxCenter * dxCenter) + (dyCenter * dyCenter) >= maxCenterDist * maxCenterDist) return;
 
-  if (dist >= minDist) return;
+  const hitboxA = a.hitbox || getFruitHitboxTemplate(a.type);
+  const hitboxB = b.hitbox || getFruitHitboxTemplate(b.type);
+  const scaleA = a.hitboxScale || getFruitHitboxScale(a.type, a.r);
+  const scaleB = b.hitboxScale || getFruitHitboxScale(b.type, b.r);
+  const cosA = Math.cos(a.angle);
+  const sinA = Math.sin(a.angle);
+  const cosB = Math.cos(b.angle);
+  const sinB = Math.sin(b.angle);
+
+  let best = null;
+
+  for (const ca of hitboxA) {
+    const oxA = ca.x * scaleA;
+    const oyA = ca.y * scaleA;
+    const ax = a.x + (oxA * cosA) - (oyA * sinA);
+    const ay = a.y + (oxA * sinA) + (oyA * cosA);
+    const ar = ca.r * scaleA;
+
+    for (const cb of hitboxB) {
+      const oxB = cb.x * scaleB;
+      const oyB = cb.y * scaleB;
+      const bx = b.x + (oxB * cosB) - (oyB * sinB);
+      const by = b.y + (oxB * sinB) + (oyB * cosB);
+      const br = cb.r * scaleB;
+
+      const dx = bx - ax;
+      const dy = by - ay;
+      const minDist = ar + br;
+      const distSq = (dx * dx) + (dy * dy);
+      if (distSq >= minDist * minDist) continue;
+
+      let dist = Math.sqrt(distSq);
+      if (dist < 0.0001) dist = 0.0001;
+      const overlap = minDist - dist;
+
+      if (!best || overlap > best.overlap) {
+        const nx = dx / dist;
+        const ny = dy / dist;
+        best = { ax, ay, ar, bx, by, br, nx, ny, overlap, minDist };
+      }
+    }
+  }
+
+  if (!best) return;
   if (mergeFruits(a, b, spawnedFruits)) return;
 
-  if (dist < 0.0001) dist = 0.0001;
-  const nx = dx / dist;
-  const ny = dy / dist;
-  const overlap = minDist - dist;
+  const nx = best.nx;
+  const ny = best.ny;
   const totalMass = a.mass + b.mass;
-  const slop = Math.max(CONTACT_SLOP, minDist * 0.006);
-  const penetration = Math.max(0, overlap - slop);
+  const slop = Math.max(CONTACT_SLOP, best.minDist * 0.006);
+  const penetration = Math.max(0, best.overlap - slop);
+
   if (penetration > 0) {
     const correction = penetration * POSITION_CORRECTION;
     const pushA = correction * (b.mass / totalMass);
     const pushB = correction * (a.mass / totalMass);
-
     a.x -= nx * pushA;
     a.y -= ny * pushA;
     b.x += nx * pushB;
     b.y += ny * pushB;
   }
 
-  const rvx = b.vx - a.vx;
-  const rvy = b.vy - a.vy;
-  const speedNormal = rvx * nx + rvy * ny;
+  const contactX = best.ax + nx * best.ar;
+  const contactY = best.ay + ny * best.ar;
+
+  const raX = contactX - a.x;
+  const raY = contactY - a.y;
+  const rbX = contactX - b.x;
+  const rbY = contactY - b.y;
+
+  const velAX = a.vx + (-a.av * raY);
+  const velAY = a.vy + (a.av * raX);
+  const velBX = b.vx + (-b.av * rbY);
+  const velBY = b.vy + (b.av * rbX);
+
+  const rvx = velBX - velAX;
+  const rvy = velBY - velAY;
+  const speedNormal = (rvx * nx) + (rvy * ny);
   if (speedNormal > 0) return;
 
+  const invMassA = 1 / a.mass;
+  const invMassB = 1 / b.mass;
+  const inertiaA = a.mass * Math.max(8, a.boundR || a.r) * Math.max(8, a.boundR || a.r) * 0.58;
+  const inertiaB = b.mass * Math.max(8, b.boundR || b.r) * Math.max(8, b.boundR || b.r) * 0.58;
+  const invInertiaA = inertiaA > 0 ? 1 / inertiaA : 0;
+  const invInertiaB = inertiaB > 0 ? 1 / inertiaB : 0;
+
+  const raCrossN = (raX * ny) - (raY * nx);
+  const rbCrossN = (rbX * ny) - (rbY * nx);
+  const normalDenom = invMassA + invMassB + (raCrossN * raCrossN * invInertiaA) + (rbCrossN * rbCrossN * invInertiaB);
+  if (normalDenom <= 0) return;
+
   const restitution = Math.abs(speedNormal) > MIN_BOUNCE_SPEED ? BODY_BOUNCE : 0;
-  const impulse = -((1 + restitution) * speedNormal) / ((1 / a.mass) + (1 / b.mass));
+  const impulse = -((1 + restitution) * speedNormal) / normalDenom;
   const ix = impulse * nx;
   const iy = impulse * ny;
 
-  a.vx -= ix / a.mass;
-  a.vy -= iy / a.mass;
-  b.vx += ix / b.mass;
-  b.vy += iy / b.mass;
+  a.vx -= ix * invMassA;
+  a.vy -= iy * invMassA;
+  b.vx += ix * invMassB;
+  b.vy += iy * invMassB;
+
+  a.av = clamp(a.av - (((raX * iy) - (raY * ix)) * invInertiaA * SPIN_TRANSFER), -MAX_ANGULAR_SPEED, MAX_ANGULAR_SPEED);
+  b.av = clamp(b.av + (((rbX * iy) - (rbY * ix)) * invInertiaB * SPIN_TRANSFER), -MAX_ANGULAR_SPEED, MAX_ANGULAR_SPEED);
 
   const tx = -ny;
   const ty = nx;
-  const rvxAfter = b.vx - a.vx;
-  const rvyAfter = b.vy - a.vy;
-  const tangentSpeed = rvxAfter * tx + rvyAfter * ty;
 
-  const invMassSum = (1 / a.mass) + (1 / b.mass);
+  const velAXAfter = a.vx + (-a.av * raY);
+  const velAYAfter = a.vy + (a.av * raX);
+  const velBXAfter = b.vx + (-b.av * rbY);
+  const velBYAfter = b.vy + (b.av * rbX);
+  const tangentSpeed = ((velBXAfter - velAXAfter) * tx) + ((velBYAfter - velAYAfter) * ty);
+
+  const raCrossT = (raX * ty) - (raY * tx);
+  const rbCrossT = (rbX * ty) - (rbY * tx);
+  const tangentDenom = invMassA + invMassB + (raCrossT * raCrossT * invInertiaA) + (rbCrossT * rbCrossT * invInertiaB);
+
   let tangentImpulse = 0;
-  if (Math.abs(tangentSpeed) > TANGENT_SPIN_EPSILON) {
-    tangentImpulse = -tangentSpeed / invMassSum;
+  if (tangentDenom > 0 && Math.abs(tangentSpeed) > TANGENT_SPIN_EPSILON) {
+    tangentImpulse = -tangentSpeed / tangentDenom;
     const maxFrictionImpulse = Math.abs(impulse) * COLLISION_FRICTION;
     tangentImpulse = clamp(tangentImpulse, -maxFrictionImpulse, maxFrictionImpulse);
   }
@@ -389,42 +1874,74 @@ function solveCollision(a, b, spawnedFruits) {
     const fix = tangentImpulse * tx;
     const fiy = tangentImpulse * ty;
 
-    a.vx -= fix / a.mass;
-    a.vy -= fiy / a.mass;
-    b.vx += fix / b.mass;
-    b.vy += fiy / b.mass;
+    a.vx -= fix * invMassA;
+    a.vy -= fiy * invMassA;
+    b.vx += fix * invMassB;
+    b.vy += fiy * invMassB;
 
-    const spinA = (2 * tangentImpulse) / (a.mass * Math.max(8, a.r));
-    const spinB = (2 * tangentImpulse) / (b.mass * Math.max(8, b.r));
-    a.av = clamp(a.av - spinA * SPIN_TRANSFER, -MAX_ANGULAR_SPEED, MAX_ANGULAR_SPEED);
-    b.av = clamp(b.av + spinB * SPIN_TRANSFER, -MAX_ANGULAR_SPEED, MAX_ANGULAR_SPEED);
+    a.av = clamp(a.av - (((raX * fiy) - (raY * fix)) * invInertiaA * SPIN_TRANSFER), -MAX_ANGULAR_SPEED, MAX_ANGULAR_SPEED);
+    b.av = clamp(b.av + (((rbX * fiy) - (rbY * fix)) * invInertiaB * SPIN_TRANSFER), -MAX_ANGULAR_SPEED, MAX_ANGULAR_SPEED);
   }
 }
 
 function solveWalls(fruit) {
   if (fruit.remove) return;
 
-  if (fruit.x - fruit.r < WALL) {
-    fruit.x = WALL + fruit.r;
-    fruit.vx = Math.abs(fruit.vx) * WALL_BOUNCE;
-    fruit.av *= 0.92;
+  const hitbox = fruit.hitbox || getFruitHitboxTemplate(fruit.type);
+  const scale = fruit.hitboxScale || getFruitHitboxScale(fruit.type, fruit.r);
+  const cos = Math.cos(fruit.angle);
+  const sin = Math.sin(fruit.angle);
+
+  let floorTouched = false;
+  let floorContactX = fruit.x;
+
+  for (const circle of hitbox) {
+    const ox = circle.x * scale;
+    const oy = circle.y * scale;
+    const cx = fruit.x + (ox * cos) - (oy * sin);
+    const cy = fruit.y + (ox * sin) + (oy * cos);
+    const cr = circle.r * scale;
+
+    if (cx - cr < WALL) {
+      const penetration = WALL - (cx - cr);
+      fruit.x += penetration;
+      if (fruit.vx < 0) fruit.vx = Math.abs(fruit.vx) * WALL_BOUNCE;
+      fruit.av *= 0.92;
+    }
+
+    if (cx + cr > WIDTH - WALL) {
+      const penetration = (cx + cr) - (WIDTH - WALL);
+      fruit.x -= penetration;
+      if (fruit.vx > 0) fruit.vx = -Math.abs(fruit.vx) * WALL_BOUNCE;
+      fruit.av *= 0.92;
+    }
+
+    if (cy + cr > HEIGHT) {
+      const penetration = (cy + cr) - HEIGHT;
+      fruit.y -= penetration;
+      floorTouched = true;
+      floorContactX = cx;
+    }
+
+    if (cy - cr < 0) {
+      const penetration = 0 - (cy - cr);
+      fruit.y += penetration;
+      if (fruit.vy < 0) fruit.vy = Math.abs(fruit.vy) * 0.12;
+    }
   }
-  if (fruit.x + fruit.r > WIDTH - WALL) {
-    fruit.x = WIDTH - WALL - fruit.r;
-    fruit.vx = -Math.abs(fruit.vx) * WALL_BOUNCE;
-    fruit.av *= 0.92;
-  }
-  if (fruit.y + fruit.r > HEIGHT) {
-    fruit.y = HEIGHT - fruit.r;
+
+  if (floorTouched) {
     if (fruit.vy > 0) {
       fruit.vy = fruit.vy < 0.35 ? 0 : -fruit.vy * 0.04;
     }
+
     fruit.vx *= FLOOR_FRICTION;
 
-    const slip = fruit.vx - fruit.av * fruit.r;
+    const leverX = floorContactX - fruit.x;
+    const slip = fruit.vx - (fruit.av * leverX);
     const grip = clamp(slip * ROLLING_GRIP, -0.22, 0.22);
     fruit.vx -= grip;
-    fruit.av += grip / Math.max(8, fruit.r);
+    fruit.av += grip / Math.max(8, fruit.boundR || fruit.r);
 
     if (Math.abs(fruit.vy) < 0.08) fruit.vy = 0;
 
@@ -438,6 +1955,18 @@ function solveWalls(fruit) {
   }
 }
 
+function stabilizeFruitRotation(fruit) {
+  const nearFloor = fruit.y + (fruit.boundR || fruit.r) >= HEIGHT - FLOOR_STICK_EPSILON;
+  const slowLinear = Math.abs(fruit.vx) < ROTATION_STABILIZE_LINEAR && Math.abs(fruit.vy) < ROTATION_STABILIZE_LINEAR;
+
+  if (nearFloor && slowLinear) {
+    fruit.av *= STABLE_ANGULAR_DAMPING;
+    if (Math.abs(fruit.av) < ANGULAR_REST_LOCK) fruit.av = 0;
+  } else if (Math.abs(fruit.av) < ANGULAR_REST_LOCK * 0.55) {
+    fruit.av = 0;
+  }
+}
+
 function integrateFruit(fruit) {
   if (fruit.remove) return;
   fruit.vy += BASE_GRAVITY * fruit.gravityScale;
@@ -446,9 +1975,10 @@ function integrateFruit(fruit) {
   fruit.y += fruit.vy;
   fruit.mergeCooldown = Math.max(0, fruit.mergeCooldown - 1);
   solveWalls(fruit);
+  stabilizeFruitRotation(fruit);
 
   fruit.av = clamp(fruit.av * ANGULAR_DAMPING, -MAX_ANGULAR_SPEED, MAX_ANGULAR_SPEED);
-  if (Math.abs(fruit.av) < 0.0012) fruit.av = 0;
+  if (Math.abs(fruit.av) < ANGULAR_REST_LOCK * 0.55) fruit.av = 0;
   fruit.angle += fruit.av;
   if (fruit.angle > Math.PI * 2 || fruit.angle < -Math.PI * 2) {
     fruit.angle %= Math.PI * 2;
@@ -463,15 +1993,15 @@ function updateDangerState() {
 
     const centerY = fruit.y;
     const protectedFruit = frameCount - fruit.bornFrame < SPAWN_PROTECTION_FRAMES;
-    const movingFast = Math.abs(fruit.vx) + Math.abs(fruit.vy) >= LOW_SPEED_THRESHOLD;
+    const dangerLineThreshold = DANGER_LINE;
 
-    if (centerY < DANGER_LINE && !protectedFruit && !movingFast) {
+    if (centerY < dangerLineThreshold && !protectedFruit) {
       isDanger = true;
       break;
     }
   }
 
-  dangerFrames = isDanger ? dangerFrames + 1 : Math.max(0, dangerFrames - 2);
+  dangerFrames = isDanger ? dangerFrames + 1 : Math.max(0, dangerFrames - 1);
   updateDangerMeter();
 
   if (isDanger) {
@@ -515,11 +2045,12 @@ function physicsStep() {
 
   for (const fruit of fruits) {
     if (fruit.remove) continue;
-    if (fruit.y + fruit.r >= HEIGHT - 0.5) {
+    if (fruit.y + (fruit.boundR || fruit.r) >= HEIGHT - 0.5) {
       fruit.vx *= SURFACE_FRICTION;
     }
     if (Math.abs(fruit.vx) < 0.015) fruit.vx = 0;
     if (Math.abs(fruit.vy) < 0.015) fruit.vy = 0;
+    stabilizeFruitRotation(fruit);
   }
 
   fruits = fruits.filter((fruit) => !fruit.remove);
@@ -544,29 +2075,14 @@ function physicsStep() {
   if (screenShake > 0.2) screenShake *= 0.86;
   else screenShake = 0;
 }
-
 function drawFruit(fruit) {
-  const meta = FRUITS[fruit.type];
+  const size = fruit.r * 2 * getFruitRenderScale(fruit.type);
+  const sprite = getSpriteCanvas(fruit.type, size);
+
   ctx.save();
   ctx.translate(fruit.x, fruit.y);
   ctx.rotate(fruit.angle);
-
-  ctx.beginPath();
-  ctx.fillStyle = meta.color;
-  ctx.arc(0, 0, fruit.r, 0, Math.PI * 2);
-  ctx.fill();
-
-  ctx.globalAlpha = 0.22;
-  ctx.beginPath();
-  ctx.fillStyle = '#ffffff';
-  ctx.arc(-fruit.r * 0.28, -fruit.r * 0.34, fruit.r * 0.34, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.globalAlpha = 1;
-
-  ctx.font = `${Math.max(16, fruit.r * 0.98)}px serif`;
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.fillText(meta.emoji, 0, 2);
+  ctx.drawImage(sprite, -size / 2, -size / 2, size, size);
   ctx.restore();
 }
 
@@ -585,7 +2101,6 @@ function drawGuideLine() {
   ctx.stroke();
   ctx.restore();
 }
-
 
 function drawBackground() {
   const background = ctx.createLinearGradient(0, 0, 0, HEIGHT);
@@ -630,8 +2145,11 @@ function render() {
   drawBackground();
   drawGuideLine();
   for (const fruit of fruits) drawFruit(fruit);
+  if (hitboxEditor.enabled) drawFruitHitboxOverlay();
   drawParticles();
   ctx.restore();
+
+  if (hitboxEditor.enabled) drawHitboxEditorPanel();
 }
 
 function triggerGameOver() {
@@ -662,6 +2180,7 @@ function resetGame() {
   chainFrames = 0;
   accumulator = 0;
   lastFrameTime = 0;
+  lastDropAt = -Infinity;
 
   scoreEl.textContent = '0';
   overlayEl.classList.add('hidden');
@@ -702,9 +2221,11 @@ function handlePointerUp(event) {
   if (event.pointerType === 'mouse' && event.button !== 0) return;
   event.preventDefault();
   setPointer(event.clientX);
-  spawnFruit();
+
   pointerIsDown = false;
   activePointerId = null;
+  spawnFruit();
+  suppressClickUntil = getNow() + 120;
 }
 
 function clearPointerState() {
@@ -712,15 +2233,79 @@ function clearPointerState() {
   activePointerId = null;
 }
 
-canvas.addEventListener('pointermove', (event) => setPointer(event.clientX));
-canvas.addEventListener('pointerdown', handlePointerDown);
-canvas.addEventListener('pointerup', handlePointerUp);
-window.addEventListener('pointerup', handlePointerUp);
-window.addEventListener('pointercancel', clearPointerState);
-canvas.addEventListener('pointercancel', clearPointerState);
-canvas.addEventListener('contextmenu', (event) => event.preventDefault());
+function handleCanvasClick(event) {
+  if (event.button !== 0) return;
+  if (getNow() < suppressClickUntil) return;
+
+  // Recover from stale pointer state in browsers that drop pointerup.
+  pointerIsDown = false;
+  activePointerId = null;
+
+  setPointer(event.clientX);
+  spawnFruit();
+}
+
+canvas.addEventListener('pointermove', (event) => {
+  if (hitboxEditor.enabled) {
+    handleHitboxEditorPointerMove(event);
+    return;
+  }
+  setPointer(event.clientX);
+});
+canvas.addEventListener('pointerdown', (event) => {
+  if (hitboxEditor.enabled) {
+    handleHitboxEditorPointerDown(event);
+    return;
+  }
+  handlePointerDown(event);
+});
+canvas.addEventListener('pointerup', (event) => {
+  if (hitboxEditor.enabled) {
+    handleHitboxEditorPointerUp(event);
+    return;
+  }
+  handlePointerUp(event);
+});
+window.addEventListener('pointerup', (event) => {
+  if (hitboxEditor.enabled) {
+    handleHitboxEditorPointerUp(event);
+    return;
+  }
+  handlePointerUp(event);
+});
+canvas.addEventListener('click', (event) => {
+  if (hitboxEditor.enabled) {
+    event.preventDefault();
+    return;
+  }
+  handleCanvasClick(event);
+});
+window.addEventListener('pointercancel', (event) => {
+  if (hitboxEditor.enabled) {
+    handleHitboxEditorPointerUp(event);
+    return;
+  }
+  clearPointerState();
+});
+canvas.addEventListener('pointercancel', (event) => {
+  if (hitboxEditor.enabled) {
+    handleHitboxEditorPointerUp(event);
+    return;
+  }
+  clearPointerState();
+});
+canvas.addEventListener('contextmenu', (event) => {
+  if (hitboxEditor.enabled) {
+    handleHitboxEditorContextMenu(event);
+    event.preventDefault();
+    return;
+  }
+  event.preventDefault();
+});
 
 window.addEventListener('keydown', (event) => {
+  if (handleHitboxEditorKeydown(event)) return;
+
   const key = event.key.toLowerCase();
   if (key === 'r') {
     resetGame();
@@ -747,6 +2332,7 @@ window.addEventListener('resize', () => {
   updatePreviewVisual();
   updatePreviewPosition();
 });
+
 restartBtn.addEventListener('click', resetGame);
 
 function frame(timestamp) {
@@ -754,7 +2340,7 @@ function frame(timestamp) {
   const delta = Math.min(64, timestamp - lastFrameTime);
   lastFrameTime = timestamp;
 
-  if (!gameOver) {
+  if (!gameOver && !hitboxEditor.enabled) {
     accumulator += delta * GAME_SPEED;
     let steps = 0;
 
@@ -774,5 +2360,10 @@ function frame(timestamp) {
   requestAnimationFrame(frame);
 }
 
+loadHitboxEditorConfig();
+buildFruitLegend();
 resetGame();
 requestAnimationFrame(frame);
+
+
+
