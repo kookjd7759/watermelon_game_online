@@ -33,11 +33,13 @@ const FLOOR_FRICTION = 0.995;
 const SURFACE_FRICTION = 0.9960;
 const WALL_BOUNCE = 0.08;
 const BODY_BOUNCE = 0.035;
-const COLLISION_FRICTION = 0.55;
+const COLLISION_FRICTION = 0.87;
 const SPIN_TRANSFER = 0.42;
 const ANGULAR_DAMPING = 0.9945;
 const MAX_ANGULAR_SPEED = 0.26;
 const ROLLING_GRIP = 0.0702;
+const WALL_ROLLING_GRIP = 0.052;
+const WALL_SPIN_DAMPING = 0.985;
 const FLOOR_ANGULAR_DAMPING = 0.79;
 const TANGENT_SPIN_EPSILON = 0.06;
 const REST_LINEAR_EPSILON = 0.025;
@@ -53,7 +55,7 @@ const SOLVER_ITERATIONS = 8;
 
 const DROP_COOLDOWN_MS = Math.round(460 / GAME_SPEED);
 const DROP_DEBOUNCE_MS = 90;
-const GAME_OVER_SECONDS = 3;
+const GAME_OVER_SECONDS = 2.5;
 const GAME_OVER_FRAMES = Math.round(GAME_OVER_SECONDS * PHYSICS_FPS * GAME_SPEED);
 const DANGER_LINE_RED_DELAY_SECONDS = 0.5;
 const DANGER_LINE_RED_DELAY_FRAMES = Math.round(DANGER_LINE_RED_DELAY_SECONDS * PHYSICS_FPS * GAME_SPEED);
@@ -77,7 +79,7 @@ const FRUITS = [
   { name: 'Pear', label: 'Pear', radius: 98.252, score: 28, color: '#d6df6e', skin: 'pear' },
   { name: 'Peach', label: 'Peach', radius: 96.48, score: 36, color: '#ffb29f', skin: 'peach' },
   { name: 'Pineapple', label: 'Pineapple', radius: 130.9, score: 45, color: '#ffd368', skin: 'pineapple' },
-  { name: 'Melon', label: 'Melon', radius: 167.2, score: 55, color: '#94df73', skin: 'melon' },
+  { name: 'Melon', label: 'Melon', radius: 142.12, score: 55, color: '#94df73', skin: 'melon' },
   { name: 'Watermelon', label: 'Watermelon', radius: 200, score: 66, color: '#46b55d', skin: 'watermelon' },
 ];
 
@@ -1902,7 +1904,9 @@ function solveCollision(a, b, spawnedFruits) {
   let tangentImpulse = 0;
   if (tangentDenom > 0 && Math.abs(tangentSpeed) > TANGENT_SPIN_EPSILON) {
     tangentImpulse = -tangentSpeed / tangentDenom;
-    const maxFrictionImpulse = Math.abs(impulse) * COLLISION_FRICTION;
+    const slipRatio = clamp((Math.abs(tangentSpeed) - TANGENT_SPIN_EPSILON) / 0.6, 0, 1);
+    const effectiveFriction = COLLISION_FRICTION * (0.42 + (0.58 * slipRatio));
+    const maxFrictionImpulse = Math.abs(impulse) * effectiveFriction;
     tangentImpulse = clamp(tangentImpulse, -maxFrictionImpulse, maxFrictionImpulse);
   }
 
@@ -1920,6 +1924,27 @@ function solveCollision(a, b, spawnedFruits) {
   }
 }
 
+function applyWallGrip(fruit, wallSide) {
+  const radius = Math.max(8, fruit.boundR || fruit.r);
+  const contactRx = (wallSide === 'left' ? -radius : radius) * 0.92;
+  const wallSlip = fruit.vy + (fruit.av * contactRx);
+  const wallGrip = clamp(wallSlip * WALL_ROLLING_GRIP, -0.2, 0.2);
+
+  fruit.vy -= wallGrip;
+  fruit.av = clamp(
+    fruit.av + ((wallGrip * contactRx) / radius) * 0.32,
+    -MAX_ANGULAR_SPEED,
+    MAX_ANGULAR_SPEED,
+  );
+
+  // Small outward bias prevents sticky wall-slide in tight stacks.
+  if (Math.abs(fruit.vx) < 0.03 && Math.abs(fruit.vy) > 0.12) {
+    fruit.vx += wallSide === 'left' ? 0.012 : -0.012;
+  }
+
+  fruit.av *= WALL_SPIN_DAMPING;
+}
+
 function solveWalls(fruit) {
   if (fruit.remove) return;
 
@@ -1928,7 +1953,10 @@ function solveWalls(fruit) {
   const cos = Math.cos(fruit.angle);
   const sin = Math.sin(fruit.angle);
 
-  let floorTouched = false;
+  let leftPenetration = 0;
+  let rightPenetration = 0;
+  let floorPenetration = 0;
+  let topPenetration = 0;
   let floorContactX = fruit.x;
 
   for (const circle of hitbox) {
@@ -1940,33 +1968,50 @@ function solveWalls(fruit) {
 
     if (cx - cr < WALL) {
       const penetration = WALL - (cx - cr);
-      fruit.x += penetration;
-      if (fruit.vx < 0) fruit.vx = Math.abs(fruit.vx) * WALL_BOUNCE;
-      fruit.av *= 0.92;
+      if (penetration > leftPenetration) leftPenetration = penetration;
     }
 
     if (cx + cr > WIDTH - WALL) {
       const penetration = (cx + cr) - (WIDTH - WALL);
-      fruit.x -= penetration;
-      if (fruit.vx > 0) fruit.vx = -Math.abs(fruit.vx) * WALL_BOUNCE;
-      fruit.av *= 0.92;
+      if (penetration > rightPenetration) rightPenetration = penetration;
     }
 
     if (cy + cr > HEIGHT) {
       const penetration = (cy + cr) - HEIGHT;
-      fruit.y -= penetration;
-      floorTouched = true;
-      floorContactX = cx;
+      if (penetration > floorPenetration) {
+        floorPenetration = penetration;
+        floorContactX = cx;
+      }
     }
 
     if (cy - cr < 0) {
-      const penetration = 0 - (cy - cr);
-      fruit.y += penetration;
-      if (fruit.vy < 0) fruit.vy = Math.abs(fruit.vy) * 0.12;
+      const penetration = -(cy - cr);
+      if (penetration > topPenetration) topPenetration = penetration;
     }
   }
 
-  if (floorTouched) {
+  if (leftPenetration > 0) {
+    fruit.x += leftPenetration;
+    if (fruit.vx < 0) fruit.vx = Math.abs(fruit.vx) * WALL_BOUNCE;
+    applyWallGrip(fruit, 'left');
+  }
+
+  if (rightPenetration > 0) {
+    fruit.x -= rightPenetration;
+    if (fruit.vx > 0) fruit.vx = -Math.abs(fruit.vx) * WALL_BOUNCE;
+    applyWallGrip(fruit, 'right');
+  }
+
+  if (floorPenetration > 0) {
+    fruit.y -= floorPenetration;
+  }
+
+  if (topPenetration > 0) {
+    fruit.y += topPenetration;
+    if (fruit.vy < 0) fruit.vy = Math.abs(fruit.vy) * 0.12;
+  }
+
+  if (floorPenetration > 0) {
     if (fruit.vy > 0) {
       fruit.vy = fruit.vy < 0.35 ? 0 : -fruit.vy * 0.04;
     }
