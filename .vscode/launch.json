@@ -1,0 +1,24 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Hitbox Editor (Local GUI)",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/hitbox-editor/hitbox_editor_local.py",
+      "console": "integratedTerminal",
+      "justMyCode": true
+    },
+    {
+      "name": "Apply Hitbox Config (assets/hitbox_config.json)",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/hitbox-editor/apply_hitbox_config.py",
+      "args": [
+        "${workspaceFolder}/assets/hitbox_config.json"
+      ],
+      "console": "integratedTerminal",
+      "justMyCode": true
+    }
+  ]
+}
