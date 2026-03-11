@@ -33,13 +33,13 @@ const FLOOR_FRICTION = 0.995;
 const SURFACE_FRICTION = 0.9960;
 const WALL_BOUNCE = 0.08;
 const BODY_BOUNCE = 0.035;
-const COLLISION_FRICTION = 0.87;
+const COLLISION_FRICTION = 0.08;
 const SPIN_TRANSFER = 0.42;
 const ANGULAR_DAMPING = 0.9945;
 const MAX_ANGULAR_SPEED = 0.26;
 const ROLLING_GRIP = 0.0702;
-const WALL_ROLLING_GRIP = 0.052;
-const WALL_SPIN_DAMPING = 0.985;
+const WALL_ROLLING_GRIP = 0.012;
+const WALL_SPIN_DAMPING = 0.78;
 const FLOOR_ANGULAR_DAMPING = 0.79;
 const TANGENT_SPIN_EPSILON = 0.06;
 const REST_LINEAR_EPSILON = 0.025;
@@ -1927,25 +1927,28 @@ function solveCollision(a, b, spawnedFruits) {
 function applyWallGrip(fruit, wallSide) {
   const radius = Math.max(8, fruit.boundR || fruit.r);
   const contactRx = (wallSide === 'left' ? -radius : radius) * 0.92;
-  const wallSlip = fruit.vy + (fruit.av * contactRx);
-  const wallGrip = clamp(wallSlip * WALL_ROLLING_GRIP, -0.2, 0.2);
 
-  fruit.vy -= wallGrip;
-  fruit.av = clamp(
-    fruit.av + ((wallGrip * contactRx) / radius) * 0.32,
-    -MAX_ANGULAR_SPEED,
-    MAX_ANGULAR_SPEED,
-  );
-
-  // Small outward bias prevents sticky wall-slide in tight stacks.
-  if (Math.abs(fruit.vx) < 0.03 && Math.abs(fruit.vy) > 0.12) {
-    fruit.vx += wallSide === 'left' ? 0.012 : -0.012;
+  // Damping-only wall contact: removes vertical slip and spin without injecting energy.
+  const wallSlip = fruit.vy + (fruit.av * contactRx * 0.2);
+  const slipMag = Math.abs(wallSlip);
+  if (slipMag < 0.0001) {
+    fruit.av *= WALL_SPIN_DAMPING;
+    return;
   }
 
+  const damping = clamp(slipMag * WALL_ROLLING_GRIP, 0, 0.18);
+  const linearFactor = 1 - damping;
+  const angularFactor = 1 - Math.min(0.65, damping * 2.4);
+
+  fruit.vy *= linearFactor;
+  fruit.av *= angularFactor;
   fruit.av *= WALL_SPIN_DAMPING;
+
+  if (Math.abs(fruit.vy) < 0.02) fruit.vy = 0;
+  if (Math.abs(fruit.av) < 0.003) fruit.av = 0;
 }
 
-function solveWalls(fruit) {
+function solveWalls(fruit, applyVelocity = true) {
   if (fruit.remove) return;
 
   const hitbox = fruit.hitbox || getFruitHitboxTemplate(fruit.type);
@@ -1992,14 +1995,30 @@ function solveWalls(fruit) {
 
   if (leftPenetration > 0) {
     fruit.x += leftPenetration;
-    if (fruit.vx < 0) fruit.vx = Math.abs(fruit.vx) * WALL_BOUNCE;
-    applyWallGrip(fruit, 'left');
+    if (applyVelocity) {
+      if (fruit.vx < 0) fruit.vx = Math.abs(fruit.vx) * WALL_BOUNCE;
+      applyWallGrip(fruit, 'left');
+    }
   }
 
   if (rightPenetration > 0) {
     fruit.x -= rightPenetration;
-    if (fruit.vx > 0) fruit.vx = -Math.abs(fruit.vx) * WALL_BOUNCE;
-    applyWallGrip(fruit, 'right');
+    if (applyVelocity) {
+      if (fruit.vx > 0) fruit.vx = -Math.abs(fruit.vx) * WALL_BOUNCE;
+      applyWallGrip(fruit, 'right');
+    }
+  }
+
+  const touchingWall = leftPenetration > 0 || rightPenetration > 0;
+  if (applyVelocity && touchingWall) {
+    fruit.av *= 0.82;
+    if (Math.abs(fruit.vy) < 0.9) fruit.vy *= 0.9;
+    if (Math.abs(fruit.vx) < 0.12 && Math.abs(fruit.vy) < 0.35) {
+      fruit.vx *= 0.55;
+      fruit.av *= 0.52;
+    }
+    if (Math.abs(fruit.vy) < 0.08) fruit.vy = 0;
+    if (Math.abs(fruit.av) < 0.01) fruit.av = 0;
   }
 
   if (floorPenetration > 0) {
@@ -2008,10 +2027,10 @@ function solveWalls(fruit) {
 
   if (topPenetration > 0) {
     fruit.y += topPenetration;
-    if (fruit.vy < 0) fruit.vy = Math.abs(fruit.vy) * 0.12;
+    if (applyVelocity && fruit.vy < 0) fruit.vy = Math.abs(fruit.vy) * 0.12;
   }
 
-  if (floorPenetration > 0) {
+  if (applyVelocity && floorPenetration > 0) {
     if (fruit.vy > 0) {
       fruit.vy = fruit.vy < 0.35 ? 0 : -fruit.vy * 0.04;
     }
@@ -2025,6 +2044,7 @@ function solveWalls(fruit) {
     fruit.av += grip / Math.max(8, fruit.boundR || fruit.r);
 
     if (Math.abs(fruit.vy) < 0.08) fruit.vy = 0;
+    if (touchingWall && Math.abs(fruit.vy) < 0.24) fruit.vy = 0;
 
     if (fruit.vy === 0) {
       fruit.av *= FLOOR_ANGULAR_DAMPING;
@@ -2055,8 +2075,6 @@ function integrateFruit(fruit) {
   fruit.x += fruit.vx;
   fruit.y += fruit.vy;
   fruit.mergeCooldown = Math.max(0, fruit.mergeCooldown - 1);
-  solveWalls(fruit);
-  stabilizeFruitRotation(fruit);
 
   fruit.av = clamp(fruit.av * ANGULAR_DAMPING, -MAX_ANGULAR_SPEED, MAX_ANGULAR_SPEED);
   if (Math.abs(fruit.av) < ANGULAR_REST_LOCK * 0.55) fruit.av = 0;
@@ -2115,7 +2133,7 @@ function physicsStep() {
     }
 
     for (let i = 0; i < count; i += 1) {
-      solveWalls(fruits[i]);
+      solveWalls(fruits[i], iter === SOLVER_ITERATIONS - 1);
     }
   }
 
@@ -2482,6 +2500,9 @@ loadHitboxEditorConfig();
 buildFruitLegend();
 resetGame();
 requestAnimationFrame(frame);
+
+
+
 
 
 
