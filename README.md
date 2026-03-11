@@ -43,13 +43,13 @@ Source of truth: `const FRUITS` in `game.js`
 | 1 | Cherry | 16 |
 | 2 | Strawberry | 22 |
 | 3 | Grape | 29 |
-| 4 | Hallabong | 37.62 |
-| 5 | Persimmon | 49.665 |
+| 4 | Hallabong | 38 |
+| 5 | Persimmon | 50 |
 | 6 | Apple | 65 |
-| 7 | Pear | 98.252 |
-| 8 | Peach | 96.48 |
-| 9 | Pineapple | 130.9 |
-| 10 | Melon | 167.2 |
+| 7 | Pear | 98 |
+| 8 | Peach | 96 |
+| 9 | Pineapple | 131 |
+| 10 | Melon | 142 |
 | 11 | Watermelon | 200 |
 
 Note: Runtime collision size is affected by additional factors (`FRUIT_COLLISION_SCALES`, render scale, and hitbox expansion constants).

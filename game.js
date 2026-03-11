@@ -66,13 +66,13 @@ const FRUITS = [
   { name: 'Cherry', label: 'Cherry', radius: 16, score: 1, color: '#ef4c4c', skin: 'cherry' },
   { name: 'Strawberry', label: 'Strawberry', radius: 22, score: 3, color: '#ff5d84', skin: 'strawberry' },
   { name: 'Grape', label: 'Grape', radius: 29, score: 6, color: '#7c6cff', skin: 'grape' },
-  { name: 'Hallabong', label: 'Hallabong', radius: 37.62, score: 10, color: '#ffb347', skin: 'dekopon' },
-  { name: 'Persimmon', label: 'Persimmon', radius: 49.665, score: 15, color: '#ff8f4a', skin: 'persimmon' },
+  { name: 'Hallabong', label: 'Hallabong', radius: 38, score: 10, color: '#ffb347', skin: 'dekopon' },
+  { name: 'Persimmon', label: 'Persimmon', radius: 50, score: 15, color: '#ff8f4a', skin: 'persimmon' },
   { name: 'Apple', label: 'Apple', radius: 65, score: 21, color: '#ff6666', skin: 'apple' },
-  { name: 'Pear', label: 'Pear', radius: 98.252, score: 28, color: '#d6df6e', skin: 'pear' },
-  { name: 'Peach', label: 'Peach', radius: 96.48, score: 36, color: '#ffb29f', skin: 'peach' },
-  { name: 'Pineapple', label: 'Pineapple', radius: 130.9, score: 45, color: '#ffd368', skin: 'pineapple' },
-  { name: 'Melon', label: 'Melon', radius: 142.12, score: 55, color: '#94df73', skin: 'melon' },
+  { name: 'Pear', label: 'Pear', radius: 98, score: 28, color: '#d6df6e', skin: 'pear' },
+  { name: 'Peach', label: 'Peach', radius: 96, score: 36, color: '#ffb29f', skin: 'peach' },
+  { name: 'Pineapple', label: 'Pineapple', radius: 131, score: 45, color: '#ffd368', skin: 'pineapple' },
+  { name: 'Melon', label: 'Melon', radius: 142, score: 55, color: '#94df73', skin: 'melon' },
   { name: 'Watermelon', label: 'Watermelon', radius: 200, score: 66, color: '#46b55d', skin: 'watermelon' },
 ];
 
@@ -2529,6 +2529,7 @@ loadHitboxEditorConfig();
 buildFruitLegend();
 resetGame();
 requestAnimationFrame(frame);
+
 
 
 
