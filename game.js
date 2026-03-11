@@ -29,28 +29,21 @@ const MAX_CATCHUP_STEPS = 5;
 
 const BASE_GRAVITY = 0.1696;
 const AIR_DAMPING = 0.9987;
-const FLOOR_FRICTION = 0.995;
-const SURFACE_FRICTION = 0.9960;
-const WALL_BOUNCE = 0.08;
-const BODY_BOUNCE = 0.035;
-const COLLISION_FRICTION = 0.08;
-const SPIN_TRANSFER = 0.42;
+const FRUIT_CONTACT_FRICTION = 0.9;
+const WORLD_CONTACT_FRICTION = 0.8;
+const FRUIT_RESTITUTION = 0.03;
+const WORLD_RESTITUTION = 0.01;
+const TANGENT_SPIN_EPSILON = 0.02;
+const INERTIA_SCALE = 0.58;
 const ANGULAR_DAMPING = 0.9945;
 const MAX_ANGULAR_SPEED = 0.26;
-const ROLLING_GRIP = 0.0702;
-const WALL_ROLLING_GRIP = 0.012;
-const WALL_SPIN_DAMPING = 0.78;
-const FLOOR_ANGULAR_DAMPING = 0.79;
-const TANGENT_SPIN_EPSILON = 0.06;
-const REST_LINEAR_EPSILON = 0.025;
-const REST_ANGULAR_EPSILON = 0.0022;
-const ANGULAR_REST_LOCK = 0.0032;
-const STABLE_ANGULAR_DAMPING = 0.72;
-const ROTATION_STABILIZE_LINEAR = 0.045;
-const FLOOR_STICK_EPSILON = 1.4;
+const REST_LINEAR_EPSILON = 0.015;
+const REST_ANGULAR_EPSILON = 0.0019;
+const ANGULAR_REST_LOCK = 0.0026;
+const VELOCITY_DAMPING = 0.999;
 const CONTACT_SLOP = 0.1;
-const POSITION_CORRECTION = 0.95;
-const MIN_BOUNCE_SPEED = 0.55;
+const POSITION_CORRECTION = 0.9;
+const MIN_BOUNCE_SPEED = 0.72;
 const SOLVER_ITERATIONS = 8;
 
 const DROP_COOLDOWN_MS = Math.round(460 / GAME_SPEED);
@@ -344,6 +337,10 @@ function updateFruitGeometry(fruit) {
   fruit.hitboxScale = getFruitHitboxScale(fruit.type, fruit.r);
   const boundNorm = fruitHitboxBounds[fruit.type] || getTemplateBoundRadius(template);
   fruit.boundR = boundNorm * fruit.hitboxScale;
+
+  fruit.inertia = computeInertia(fruit.mass, fruit.boundR || fruit.r);
+  fruit.invMass = fruit.mass > 0 ? 1 / fruit.mass : 0;
+  fruit.invInertia = fruit.inertia > 0 ? 1 / fruit.inertia : 0;
 }
 
 function refreshFruitGeometries() {
@@ -492,6 +489,11 @@ function getMass(type) {
   const ratio = getFruitRadius(type) / baseRadius;
   const mass = 0.288 * Math.pow(ratio, 1.28);
   return clamp(mass, 0.24, 3.28);
+}
+
+function computeInertia(mass, boundRadius) {
+  const radius = Math.max(8, boundRadius);
+  return mass * radius * radius * INERTIA_SCALE;
 }
 
 function getGravityScale(type) {
@@ -1673,6 +1675,11 @@ function createFruit(type, x, y = SPAWN_Y) {
     gravityScale: getGravityScale(type),
     angle: 0,
     av: 0,
+    inertia: 0,
+    invMass: 0,
+    invInertia: 0,
+    pendingContactSpin: 0,
+    contactCount: 0,
     bornFrame: frameCount,
     mergeCooldown: 8,
     remove: false,
@@ -1684,6 +1691,7 @@ function createFruit(type, x, y = SPAWN_Y) {
   updateFruitGeometry(fruit);
   return fruit;
 }
+
 
 function spawnFruit() {
   const now = getNow();
@@ -1775,6 +1783,153 @@ function mergeFruits(a, b, spawnedFruits) {
   addBurst(merged.x, merged.y, FRUITS[next].color, merged.r / 30);
   return true;
 }
+function resetContactAccumulator(fruit) {
+  if (!fruit || fruit.remove) return;
+  fruit.pendingContactSpin = 0;
+  fruit.contactCount = 0;
+}
+
+function getContactVelocity(fruit, rx, ry) {
+  const angularVelocity = fruit.av + fruit.pendingContactSpin;
+  return {
+    x: fruit.vx + (-angularVelocity * ry),
+    y: fruit.vy + (angularVelocity * rx),
+  };
+}
+
+function accumulateContactSpin(fruit, impulseX, impulseY, rx, ry) {
+  if (!fruit || fruit.remove || !fruit.invInertia) return;
+
+  const deltaSpin = ((rx * impulseY) - (ry * impulseX)) * fruit.invInertia;
+  if (!Number.isFinite(deltaSpin) || Math.abs(deltaSpin) < 0.000001) return;
+
+  fruit.pendingContactSpin += deltaSpin;
+  fruit.contactCount += 1;
+}
+
+function commitContactRotation(fruit) {
+  if (!fruit || fruit.remove) return;
+
+  if (Math.abs(fruit.pendingContactSpin) > 0.0000001) {
+    fruit.av = clamp(fruit.av + fruit.pendingContactSpin, -MAX_ANGULAR_SPEED, MAX_ANGULAR_SPEED);
+  }
+
+  fruit.pendingContactSpin = 0;
+  fruit.contactCount = 0;
+}
+
+function resolvePairImpulse(a, b, nx, ny, contactX, contactY, restitution = 0, friction = 0) {
+  const raX = contactX - a.x;
+  const raY = contactY - a.y;
+  const rbX = contactX - b.x;
+  const rbY = contactY - b.y;
+
+  const velA = getContactVelocity(a, raX, raY);
+  const velB = getContactVelocity(b, rbX, rbY);
+
+  const rvx = velB.x - velA.x;
+  const rvy = velB.y - velA.y;
+  const speedNormal = (rvx * nx) + (rvy * ny);
+  if (speedNormal > 0) return;
+
+  const raCrossN = (raX * ny) - (raY * nx);
+  const rbCrossN = (rbX * ny) - (rbY * nx);
+  const normalDenom = a.invMass + b.invMass + (raCrossN * raCrossN * a.invInertia) + (rbCrossN * rbCrossN * b.invInertia);
+  if (normalDenom <= 0) return;
+
+  const bounce = Math.abs(speedNormal) > MIN_BOUNCE_SPEED ? restitution : 0;
+  const impulseNormal = -((1 + bounce) * speedNormal) / normalDenom;
+  if (impulseNormal <= 0) return;
+
+  const ix = impulseNormal * nx;
+  const iy = impulseNormal * ny;
+
+  a.vx -= ix * a.invMass;
+  a.vy -= iy * a.invMass;
+  b.vx += ix * b.invMass;
+  b.vy += iy * b.invMass;
+
+  accumulateContactSpin(a, -ix, -iy, raX, raY);
+  accumulateContactSpin(b, ix, iy, rbX, rbY);
+
+  if (friction <= 0) return;
+
+  const tx = -ny;
+  const ty = nx;
+  const velAAfter = getContactVelocity(a, raX, raY);
+  const velBAfter = getContactVelocity(b, rbX, rbY);
+  const tangentSpeed = ((velBAfter.x - velAAfter.x) * tx) + ((velBAfter.y - velAAfter.y) * ty);
+  if (Math.abs(tangentSpeed) <= TANGENT_SPIN_EPSILON) return;
+
+  const raCrossT = (raX * ty) - (raY * tx);
+  const rbCrossT = (rbX * ty) - (rbY * tx);
+  const tangentDenom = a.invMass + b.invMass + (raCrossT * raCrossT * a.invInertia) + (rbCrossT * rbCrossT * b.invInertia);
+  if (tangentDenom <= 0) return;
+
+  let tangentImpulse = -tangentSpeed / tangentDenom;
+  const maxFrictionImpulse = impulseNormal * friction;
+  tangentImpulse = clamp(tangentImpulse, -maxFrictionImpulse, maxFrictionImpulse);
+  if (Math.abs(tangentImpulse) < 0.00001) return;
+
+  const fix = tangentImpulse * tx;
+  const fiy = tangentImpulse * ty;
+
+  a.vx -= fix * a.invMass;
+  a.vy -= fiy * a.invMass;
+  b.vx += fix * b.invMass;
+  b.vy += fiy * b.invMass;
+
+  accumulateContactSpin(a, -fix, -fiy, raX, raY);
+  accumulateContactSpin(b, fix, fiy, rbX, rbY);
+}
+
+function resolveWorldImpulse(fruit, nx, ny, contactX, contactY, restitution = 0, friction = 0) {
+  const rx = contactX - fruit.x;
+  const ry = contactY - fruit.y;
+  const vel = getContactVelocity(fruit, rx, ry);
+  const speedNormal = (vel.x * nx) + (vel.y * ny);
+  if (speedNormal >= 0) return;
+
+  const rCrossN = (rx * ny) - (ry * nx);
+  const normalDenom = fruit.invMass + (rCrossN * rCrossN * fruit.invInertia);
+  if (normalDenom <= 0) return;
+
+  const bounce = Math.abs(speedNormal) > MIN_BOUNCE_SPEED ? restitution : 0;
+  const impulseNormal = -((1 + bounce) * speedNormal) / normalDenom;
+  if (impulseNormal <= 0) return;
+
+  const ix = impulseNormal * nx;
+  const iy = impulseNormal * ny;
+
+  fruit.vx += ix * fruit.invMass;
+  fruit.vy += iy * fruit.invMass;
+  accumulateContactSpin(fruit, ix, iy, rx, ry);
+
+  if (friction <= 0) return;
+
+  const tx = -ny;
+  const ty = nx;
+  const velAfter = getContactVelocity(fruit, rx, ry);
+  const tangentSpeed = (velAfter.x * tx) + (velAfter.y * ty);
+  if (Math.abs(tangentSpeed) <= TANGENT_SPIN_EPSILON) return;
+
+  const rCrossT = (rx * ty) - (ry * tx);
+  const tangentDenom = fruit.invMass + (rCrossT * rCrossT * fruit.invInertia);
+  if (tangentDenom <= 0) return;
+
+  let tangentImpulse = -tangentSpeed / tangentDenom;
+  const maxFrictionImpulse = impulseNormal * friction;
+  tangentImpulse = clamp(tangentImpulse, -maxFrictionImpulse, maxFrictionImpulse);
+  if (Math.abs(tangentImpulse) < 0.00001) return;
+
+  const fix = tangentImpulse * tx;
+  const fiy = tangentImpulse * ty;
+
+  fruit.vx += fix * fruit.invMass;
+  fruit.vy += fiy * fruit.invMass;
+  accumulateContactSpin(fruit, fix, fiy, rx, ry);
+}
+
 function solveCollision(a, b, spawnedFruits) {
   if (a.remove || b.remove) return;
 
@@ -1819,9 +1974,15 @@ function solveCollision(a, b, spawnedFruits) {
       const overlap = minDist - dist;
 
       if (!best || overlap > best.overlap) {
-        const nx = dx / dist;
-        const ny = dy / dist;
-        best = { ax, ay, ar, bx, by, br, nx, ny, overlap, minDist };
+        best = {
+          ax,
+          ay,
+          ar,
+          nx: dx / dist,
+          ny: dy / dist,
+          overlap,
+          minDist,
+        };
       }
     }
   }
@@ -1847,108 +2008,10 @@ function solveCollision(a, b, spawnedFruits) {
 
   const contactX = best.ax + nx * best.ar;
   const contactY = best.ay + ny * best.ar;
-
-  const raX = contactX - a.x;
-  const raY = contactY - a.y;
-  const rbX = contactX - b.x;
-  const rbY = contactY - b.y;
-
-  const velAX = a.vx + (-a.av * raY);
-  const velAY = a.vy + (a.av * raX);
-  const velBX = b.vx + (-b.av * rbY);
-  const velBY = b.vy + (b.av * rbX);
-
-  const rvx = velBX - velAX;
-  const rvy = velBY - velAY;
-  const speedNormal = (rvx * nx) + (rvy * ny);
-  if (speedNormal > 0) return;
-
-  const invMassA = 1 / a.mass;
-  const invMassB = 1 / b.mass;
-  const inertiaA = a.mass * Math.max(8, a.boundR || a.r) * Math.max(8, a.boundR || a.r) * 0.58;
-  const inertiaB = b.mass * Math.max(8, b.boundR || b.r) * Math.max(8, b.boundR || b.r) * 0.58;
-  const invInertiaA = inertiaA > 0 ? 1 / inertiaA : 0;
-  const invInertiaB = inertiaB > 0 ? 1 / inertiaB : 0;
-
-  const raCrossN = (raX * ny) - (raY * nx);
-  const rbCrossN = (rbX * ny) - (rbY * nx);
-  const normalDenom = invMassA + invMassB + (raCrossN * raCrossN * invInertiaA) + (rbCrossN * rbCrossN * invInertiaB);
-  if (normalDenom <= 0) return;
-
-  const restitution = Math.abs(speedNormal) > MIN_BOUNCE_SPEED ? BODY_BOUNCE : 0;
-  const impulse = -((1 + restitution) * speedNormal) / normalDenom;
-  const ix = impulse * nx;
-  const iy = impulse * ny;
-
-  a.vx -= ix * invMassA;
-  a.vy -= iy * invMassA;
-  b.vx += ix * invMassB;
-  b.vy += iy * invMassB;
-
-  a.av = clamp(a.av - (((raX * iy) - (raY * ix)) * invInertiaA * SPIN_TRANSFER), -MAX_ANGULAR_SPEED, MAX_ANGULAR_SPEED);
-  b.av = clamp(b.av + (((rbX * iy) - (rbY * ix)) * invInertiaB * SPIN_TRANSFER), -MAX_ANGULAR_SPEED, MAX_ANGULAR_SPEED);
-
-  const tx = -ny;
-  const ty = nx;
-
-  const velAXAfter = a.vx + (-a.av * raY);
-  const velAYAfter = a.vy + (a.av * raX);
-  const velBXAfter = b.vx + (-b.av * rbY);
-  const velBYAfter = b.vy + (b.av * rbX);
-  const tangentSpeed = ((velBXAfter - velAXAfter) * tx) + ((velBYAfter - velAYAfter) * ty);
-
-  const raCrossT = (raX * ty) - (raY * tx);
-  const rbCrossT = (rbX * ty) - (rbY * tx);
-  const tangentDenom = invMassA + invMassB + (raCrossT * raCrossT * invInertiaA) + (rbCrossT * rbCrossT * invInertiaB);
-
-  let tangentImpulse = 0;
-  if (tangentDenom > 0 && Math.abs(tangentSpeed) > TANGENT_SPIN_EPSILON) {
-    tangentImpulse = -tangentSpeed / tangentDenom;
-    const slipRatio = clamp((Math.abs(tangentSpeed) - TANGENT_SPIN_EPSILON) / 0.6, 0, 1);
-    const effectiveFriction = COLLISION_FRICTION * (0.42 + (0.58 * slipRatio));
-    const maxFrictionImpulse = Math.abs(impulse) * effectiveFriction;
-    tangentImpulse = clamp(tangentImpulse, -maxFrictionImpulse, maxFrictionImpulse);
-  }
-
-  if (Math.abs(tangentImpulse) > 0.00001) {
-    const fix = tangentImpulse * tx;
-    const fiy = tangentImpulse * ty;
-
-    a.vx -= fix * invMassA;
-    a.vy -= fiy * invMassA;
-    b.vx += fix * invMassB;
-    b.vy += fiy * invMassB;
-
-    a.av = clamp(a.av - (((raX * fiy) - (raY * fix)) * invInertiaA * SPIN_TRANSFER), -MAX_ANGULAR_SPEED, MAX_ANGULAR_SPEED);
-    b.av = clamp(b.av + (((rbX * fiy) - (rbY * fix)) * invInertiaB * SPIN_TRANSFER), -MAX_ANGULAR_SPEED, MAX_ANGULAR_SPEED);
-  }
+  resolvePairImpulse(a, b, nx, ny, contactX, contactY, FRUIT_RESTITUTION, FRUIT_CONTACT_FRICTION);
 }
 
-function applyWallGrip(fruit, wallSide) {
-  const radius = Math.max(8, fruit.boundR || fruit.r);
-  const contactRx = (wallSide === 'left' ? -radius : radius) * 0.92;
-
-  // Damping-only wall contact: removes vertical slip and spin without injecting energy.
-  const wallSlip = fruit.vy + (fruit.av * contactRx * 0.2);
-  const slipMag = Math.abs(wallSlip);
-  if (slipMag < 0.0001) {
-    fruit.av *= WALL_SPIN_DAMPING;
-    return;
-  }
-
-  const damping = clamp(slipMag * WALL_ROLLING_GRIP, 0, 0.18);
-  const linearFactor = 1 - damping;
-  const angularFactor = 1 - Math.min(0.65, damping * 2.4);
-
-  fruit.vy *= linearFactor;
-  fruit.av *= angularFactor;
-  fruit.av *= WALL_SPIN_DAMPING;
-
-  if (Math.abs(fruit.vy) < 0.02) fruit.vy = 0;
-  if (Math.abs(fruit.av) < 0.003) fruit.av = 0;
-}
-
-function solveWalls(fruit, applyVelocity = true) {
+function solveWalls(fruit, applyImpulses = true) {
   if (fruit.remove) return;
 
   const hitbox = fruit.hitbox || getFruitHitboxTemplate(fruit.type);
@@ -1960,7 +2023,10 @@ function solveWalls(fruit, applyVelocity = true) {
   let rightPenetration = 0;
   let floorPenetration = 0;
   let topPenetration = 0;
+  let leftContactY = fruit.y;
+  let rightContactY = fruit.y;
   let floorContactX = fruit.x;
+  let topContactX = fruit.x;
 
   for (const circle of hitbox) {
     const ox = circle.x * scale;
@@ -1971,12 +2037,18 @@ function solveWalls(fruit, applyVelocity = true) {
 
     if (cx - cr < WALL) {
       const penetration = WALL - (cx - cr);
-      if (penetration > leftPenetration) leftPenetration = penetration;
+      if (penetration > leftPenetration) {
+        leftPenetration = penetration;
+        leftContactY = cy;
+      }
     }
 
     if (cx + cr > WIDTH - WALL) {
       const penetration = (cx + cr) - (WIDTH - WALL);
-      if (penetration > rightPenetration) rightPenetration = penetration;
+      if (penetration > rightPenetration) {
+        rightPenetration = penetration;
+        rightContactY = cy;
+      }
     }
 
     if (cy + cr > HEIGHT) {
@@ -1989,95 +2061,67 @@ function solveWalls(fruit, applyVelocity = true) {
 
     if (cy - cr < 0) {
       const penetration = -(cy - cr);
-      if (penetration > topPenetration) topPenetration = penetration;
-    }
-  }
-
-  if (leftPenetration > 0) {
-    fruit.x += leftPenetration;
-    if (applyVelocity) {
-      if (fruit.vx < 0) fruit.vx = Math.abs(fruit.vx) * WALL_BOUNCE;
-      applyWallGrip(fruit, 'left');
-    }
-  }
-
-  if (rightPenetration > 0) {
-    fruit.x -= rightPenetration;
-    if (applyVelocity) {
-      if (fruit.vx > 0) fruit.vx = -Math.abs(fruit.vx) * WALL_BOUNCE;
-      applyWallGrip(fruit, 'right');
-    }
-  }
-
-  const touchingWall = leftPenetration > 0 || rightPenetration > 0;
-  if (applyVelocity && touchingWall) {
-    fruit.av *= 0.82;
-    if (Math.abs(fruit.vy) < 0.9) fruit.vy *= 0.9;
-    if (Math.abs(fruit.vx) < 0.12 && Math.abs(fruit.vy) < 0.35) {
-      fruit.vx *= 0.55;
-      fruit.av *= 0.52;
-    }
-    if (Math.abs(fruit.vy) < 0.08) fruit.vy = 0;
-    if (Math.abs(fruit.av) < 0.01) fruit.av = 0;
-  }
-
-  if (floorPenetration > 0) {
-    fruit.y -= floorPenetration;
-  }
-
-  if (topPenetration > 0) {
-    fruit.y += topPenetration;
-    if (applyVelocity && fruit.vy < 0) fruit.vy = Math.abs(fruit.vy) * 0.12;
-  }
-
-  if (applyVelocity && floorPenetration > 0) {
-    if (fruit.vy > 0) {
-      fruit.vy = fruit.vy < 0.35 ? 0 : -fruit.vy * 0.04;
-    }
-
-    fruit.vx *= FLOOR_FRICTION;
-
-    const leverX = floorContactX - fruit.x;
-    const slip = fruit.vx - (fruit.av * leverX);
-    const grip = clamp(slip * ROLLING_GRIP, -0.22, 0.22);
-    fruit.vx -= grip;
-    fruit.av += grip / Math.max(8, fruit.boundR || fruit.r);
-
-    if (Math.abs(fruit.vy) < 0.08) fruit.vy = 0;
-    if (touchingWall && Math.abs(fruit.vy) < 0.24) fruit.vy = 0;
-
-    if (fruit.vy === 0) {
-      fruit.av *= FLOOR_ANGULAR_DAMPING;
-      if (Math.abs(fruit.vx) < REST_LINEAR_EPSILON && Math.abs(fruit.av) < REST_ANGULAR_EPSILON) {
-        fruit.vx = 0;
-        fruit.av = 0;
+      if (penetration > topPenetration) {
+        topPenetration = penetration;
+        topContactX = cx;
       }
     }
   }
+
+  if (leftPenetration > 0) fruit.x += leftPenetration;
+  if (rightPenetration > 0) fruit.x -= rightPenetration;
+  if (floorPenetration > 0) fruit.y -= floorPenetration;
+  if (topPenetration > 0) fruit.y += topPenetration;
+
+  if (!applyImpulses) return;
+
+  if (leftPenetration > 0) {
+    resolveWorldImpulse(fruit, 1, 0, WALL, leftContactY, WORLD_RESTITUTION, WORLD_CONTACT_FRICTION);
+  }
+
+  if (rightPenetration > 0) {
+    resolveWorldImpulse(fruit, -1, 0, WIDTH - WALL, rightContactY, WORLD_RESTITUTION, WORLD_CONTACT_FRICTION);
+  }
+
+  if (floorPenetration > 0) {
+    resolveWorldImpulse(fruit, 0, -1, floorContactX, HEIGHT, WORLD_RESTITUTION, WORLD_CONTACT_FRICTION);
+  }
+
+  if (topPenetration > 0) {
+    resolveWorldImpulse(fruit, 0, 1, topContactX, 0, 0, 0.15);
+  }
 }
 
-function stabilizeFruitRotation(fruit) {
-  const nearFloor = fruit.y + (fruit.boundR || fruit.r) >= HEIGHT - FLOOR_STICK_EPSILON;
-  const slowLinear = Math.abs(fruit.vx) < ROTATION_STABILIZE_LINEAR && Math.abs(fruit.vy) < ROTATION_STABILIZE_LINEAR;
+function settleFruitMotion(fruit) {
+  if (fruit.remove) return;
 
-  if (nearFloor && slowLinear) {
-    fruit.av *= STABLE_ANGULAR_DAMPING;
-    if (Math.abs(fruit.av) < ANGULAR_REST_LOCK) fruit.av = 0;
-  } else if (Math.abs(fruit.av) < ANGULAR_REST_LOCK * 0.55) {
+  const nearFloor = fruit.y + (fruit.boundR || fruit.r) >= HEIGHT - 0.4;
+  if (nearFloor && Math.abs(fruit.vy) < REST_LINEAR_EPSILON * 1.8) {
+    fruit.vy = 0;
+  }
+
+  if (Math.abs(fruit.vx) < REST_LINEAR_EPSILON) fruit.vx = 0;
+  if (Math.abs(fruit.vy) < REST_LINEAR_EPSILON) fruit.vy = 0;
+
+  if (Math.abs(fruit.av) < REST_ANGULAR_EPSILON) {
+    fruit.av = 0;
+  } else if (nearFloor && Math.abs(fruit.av) < ANGULAR_REST_LOCK) {
     fruit.av = 0;
   }
 }
 
 function integrateFruit(fruit) {
   if (fruit.remove) return;
+
   fruit.vy += BASE_GRAVITY * fruit.gravityScale;
-  fruit.vx *= AIR_DAMPING;
+  fruit.vx *= AIR_DAMPING * VELOCITY_DAMPING;
   fruit.x += fruit.vx;
   fruit.y += fruit.vy;
   fruit.mergeCooldown = Math.max(0, fruit.mergeCooldown - 1);
 
   fruit.av = clamp(fruit.av * ANGULAR_DAMPING, -MAX_ANGULAR_SPEED, MAX_ANGULAR_SPEED);
-  if (Math.abs(fruit.av) < ANGULAR_REST_LOCK * 0.55) fruit.av = 0;
+  if (Math.abs(fruit.av) < ANGULAR_REST_LOCK * 0.5) fruit.av = 0;
+
   fruit.angle += fruit.av;
   if (fruit.angle > Math.PI * 2 || fruit.angle < -Math.PI * 2) {
     fruit.angle %= Math.PI * 2;
@@ -2121,6 +2165,11 @@ function physicsStep() {
 
   for (let iter = 0; iter < SOLVER_ITERATIONS; iter += 1) {
     const count = fruits.length;
+
+    for (let i = 0; i < count; i += 1) {
+      resetContactAccumulator(fruits[i]);
+    }
+
     for (let i = 0; i < count; i += 1) {
       const a = fruits[i];
       if (!a || a.remove) continue;
@@ -2133,7 +2182,11 @@ function physicsStep() {
     }
 
     for (let i = 0; i < count; i += 1) {
-      solveWalls(fruits[i], iter === SOLVER_ITERATIONS - 1);
+      solveWalls(fruits[i], true);
+    }
+
+    for (let i = 0; i < count; i += 1) {
+      commitContactRotation(fruits[i]);
     }
   }
 
@@ -2143,13 +2196,7 @@ function physicsStep() {
   }
 
   for (const fruit of fruits) {
-    if (fruit.remove) continue;
-    if (fruit.y + (fruit.boundR || fruit.r) >= HEIGHT - 0.5) {
-      fruit.vx *= SURFACE_FRICTION;
-    }
-    if (Math.abs(fruit.vx) < 0.015) fruit.vx = 0;
-    if (Math.abs(fruit.vy) < 0.015) fruit.vy = 0;
-    stabilizeFruitRotation(fruit);
+    settleFruitMotion(fruit);
   }
 
   fruits = fruits.filter((fruit) => !fruit.remove);
@@ -2174,6 +2221,7 @@ function physicsStep() {
   if (screenShake > 0.2) screenShake *= 0.86;
   else screenShake = 0;
 }
+
 function drawFruit(fruit) {
   const size = fruit.r * 2 * getFruitRenderScale(fruit.type);
   const sprite = getSpriteCanvas(fruit.type, size);
@@ -2369,72 +2417,56 @@ function clearPointerState() {
   activePointerId = null;
 }
 
+function routePointerEvent(event, editorHandler, gameHandler) {
+  if (hitboxEditor.enabled) {
+    editorHandler(event);
+    return true;
+  }
+  gameHandler(event);
+  return false;
+}
+
+function movePointerBy(delta) {
+  const { min, max } = getDropBounds(currentType);
+  pointerX = clamp(pointerX + delta, min, max);
+  updatePreviewPosition();
+}
+
 function handleCanvasClick(event) {
   if (event.button !== 0) return;
   if (getNow() < suppressClickUntil) return;
 
   // Recover from stale pointer state in browsers that drop pointerup.
-  pointerIsDown = false;
-  activePointerId = null;
+  clearPointerState();
 
   setPointer(event.clientX);
   spawnFruit();
 }
 
 canvas.addEventListener('pointermove', (event) => {
-  if (hitboxEditor.enabled) {
-    handleHitboxEditorPointerMove(event);
-    return;
-  }
-  setPointer(event.clientX);
+  routePointerEvent(event, handleHitboxEditorPointerMove, (e) => setPointer(e.clientX));
 });
 canvas.addEventListener('pointerdown', (event) => {
-  if (hitboxEditor.enabled) {
-    handleHitboxEditorPointerDown(event);
-    return;
-  }
-  handlePointerDown(event);
+  routePointerEvent(event, handleHitboxEditorPointerDown, handlePointerDown);
 });
 canvas.addEventListener('pointerup', (event) => {
-  if (hitboxEditor.enabled) {
-    handleHitboxEditorPointerUp(event);
-    return;
-  }
-  handlePointerUp(event);
+  routePointerEvent(event, handleHitboxEditorPointerUp, handlePointerUp);
 });
 window.addEventListener('pointerup', (event) => {
-  if (hitboxEditor.enabled) {
-    handleHitboxEditorPointerUp(event);
-    return;
-  }
-  handlePointerUp(event);
+  routePointerEvent(event, handleHitboxEditorPointerUp, handlePointerUp);
 });
 canvas.addEventListener('click', (event) => {
-  if (hitboxEditor.enabled) {
-    event.preventDefault();
-    return;
-  }
-  handleCanvasClick(event);
+  routePointerEvent(event, (e) => e.preventDefault(), handleCanvasClick);
 });
 window.addEventListener('pointercancel', (event) => {
-  if (hitboxEditor.enabled) {
-    handleHitboxEditorPointerUp(event);
-    return;
-  }
-  clearPointerState();
+  routePointerEvent(event, handleHitboxEditorPointerUp, () => clearPointerState());
 });
 canvas.addEventListener('pointercancel', (event) => {
-  if (hitboxEditor.enabled) {
-    handleHitboxEditorPointerUp(event);
-    return;
-  }
-  clearPointerState();
+  routePointerEvent(event, handleHitboxEditorPointerUp, () => clearPointerState());
 });
 canvas.addEventListener('contextmenu', (event) => {
   if (hitboxEditor.enabled) {
     handleHitboxEditorContextMenu(event);
-    event.preventDefault();
-    return;
   }
   event.preventDefault();
 });
@@ -2454,13 +2486,10 @@ window.addEventListener('keydown', (event) => {
     return;
   }
 
-  const { min, max } = getDropBounds(currentType);
   if (event.key === 'ArrowLeft') {
-    pointerX = clamp(pointerX - 16, min, max);
-    updatePreviewPosition();
+    movePointerBy(-16);
   } else if (event.key === 'ArrowRight') {
-    pointerX = clamp(pointerX + 16, min, max);
-    updatePreviewPosition();
+    movePointerBy(16);
   }
 });
 
