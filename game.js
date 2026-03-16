@@ -77,10 +77,10 @@ const FRUITS = [
   { name: 'Persimmon', label: 'Persimmon', radius: 49.665, score: 15, color: '#ff8f4a', skin: 'persimmon' },
   { name: 'Apple', label: 'Apple', radius: 65, score: 21, color: '#ff6666', skin: 'apple' },
   { name: 'Pear', label: 'Pear', radius: 98.252, score: 28, color: '#d6df6e', skin: 'pear' },
-  { name: 'Peach', label: 'Peach', radius: 96.48, score: 36, color: '#ffb29f', skin: 'peach' },
-  { name: 'Pineapple', label: 'Pineapple', radius: 130.9, score: 45, color: '#ffd368', skin: 'pineapple' },
-  { name: 'Melon', label: 'Melon', radius: 142.12, score: 55, color: '#94df73', skin: 'melon' },
-  { name: 'Watermelon', label: 'Watermelon', radius: 200, score: 66, color: '#46b55d', skin: 'watermelon' },
+  { name: 'Peach', label: 'Peach', radius: 86.832, score: 36, color: '#ffb29f', skin: 'peach' },
+  { name: 'Pineapple', label: 'Pineapple', radius: 117.81, score: 45, color: '#ffd368', skin: 'pineapple' },
+  { name: 'Melon', label: 'Melon', radius: 127.908, score: 55, color: '#94df73', skin: 'melon' },
+  { name: 'Watermelon', label: 'Watermelon', radius: 180, score: 66, color: '#46b55d', skin: 'watermelon' },
 ];
 
 // Per-fruit radius tuning for gameplay feel and progression balance.
