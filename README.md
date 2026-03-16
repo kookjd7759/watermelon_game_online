@@ -2,40 +2,62 @@
 
 A browser-playable Suika-style merge game with custom fruit sprites, tuned collision physics, and a local Python hitbox editor workflow.
 
-## Demo
-- GitHub Pages: https://kookjd7759.github.io/watermelon_game_online/
+<p align="center">
+  <a href="https://kookjd7759.github.io/watermelon_game_online/">
+    <img src="https://img.shields.io/badge/GAME_START-Play_Now-22c55e?style=for-the-badge&logo=googlechrome&logoColor=white" alt="Game Start Badge" />
+  </a>
+</p>
 
-## Run Locally
-This project is static (`index.html`, `styles.css`, `game.js`).
+<p align="center">
+  <img src="https://img.shields.io/badge/Stack-HTML%20%7C%20CSS%20%7C%20JavaScript-0f172a?style=flat-square" alt="Stack" />
+  <img src="https://img.shields.io/badge/Hitbox_Editor-Python-3776AB?style=flat-square&logo=python&logoColor=white" alt="Hitbox Editor Python" />
+  <a href="https://kookjd7759.github.io/watermelon_game_online/">
+    <img src="https://img.shields.io/badge/GitHub_Pages-Live-181717?style=flat-square&logo=github&logoColor=white" alt="GitHub Pages Live" />
+  </a>
+</p>
+
+## Quick Start
+
+### Online Demo
+- URL: https://kookjd7759.github.io/watermelon_game_online/
+
+### Run Locally
+This is a static project (`index.html`, `styles.css`, `game.js`).
 
 1. From the project root, run:
-   ```bash
-   python -m http.server 8000
-   ```
+```bash
+python -m http.server 8000
+```
 2. Open:
-   - http://localhost:8000
+- http://localhost:8000
 
 ## Controls
-- Move with mouse or touch
-- Click / Space / Enter to drop
-- Left / Right arrow to move
-- `R` to restart
 
-## Current Gameplay Tuning (snapshot)
+| Action | Key / Input |
+|---|---|
+| Aim | Mouse / Touch |
+| Drop fruit | Click / `Space` / `Enter` |
+| Move left/right | `Left Arrow` / `Right Arrow` |
+| Restart | `R` |
+
+## Gameplay Tuning (Snapshot)
 Source of truth: `game.js`
 
+### Core
 - `GAME_SPEED = 1.3`
 - `GAME_OVER_SECONDS = 3`
-- Danger timer behavior:
-  - If danger condition clears, timer resets to `0` immediately.
-  - Danger line red effect starts after `0.5s` in danger (`DANGER_LINE_RED_DELAY_SECONDS = 0.5`).
-- Physics:
-  - `FLOOR_FRICTION = 0.995`
-  - `SURFACE_FRICTION = 0.9960`
-  - `COLLISION_FRICTION = 0.55`
-  - `AIR_DAMPING = 0.9987`
 
-## Current Fruit Radius Values
+### Danger Timer
+- If the danger condition clears, the timer resets to `0` immediately.
+- The danger line turns red after `0.5s` in danger (`DANGER_LINE_RED_DELAY_SECONDS = 0.5`).
+
+### Physics
+- `FLOOR_FRICTION = 0.995`
+- `SURFACE_FRICTION = 0.9960`
+- `COLLISION_FRICTION = 0.55`
+- `AIR_DAMPING = 0.9987`
+
+## Fruit Radius Table
 Source of truth: `const FRUITS` in `game.js`
 
 | # | Fruit | Radius |
@@ -52,12 +74,12 @@ Source of truth: `const FRUITS` in `game.js`
 | 10 | Melon | 142 |
 | 11 | Watermelon | 200 |
 
-Note: Runtime collision size is affected by additional factors (`FRUIT_COLLISION_SCALES`, render scale, and hitbox expansion constants).
+Note: Runtime collision size is also affected by `FRUIT_COLLISION_SCALES`, render scale, and hitbox expansion constants.
 
 ## Hitbox Editing Workflow (Local Python)
 Tools are in `hitbox-editor/`.
 
-### 1) Open local GUI editor
+### 1) Open the local GUI editor
 ```bash
 python hitbox-editor/hitbox_editor_local.py
 ```
@@ -65,12 +87,13 @@ python hitbox-editor/hitbox_editor_local.py
 Features:
 - Circle and ellipse editing
 - Transparent hitbox outlines (image behind remains visible)
-- Save JSON to `assets/hitbox_config.json` (or custom path)
+- Save JSON to `assets/hitbox_config.json` (or a custom path)
 
 ### 2) Apply JSON to `game.js`
 ```bash
 python hitbox-editor/apply_hitbox_config.py
 ```
+
 Or:
 ```bash
 python hitbox-editor/apply_hitbox_config.py assets/hitbox_config.json
@@ -91,9 +114,9 @@ Configured in `.vscode/launch.json`:
 
 This prevents stale `localStorage` editor data from overriding JSON-applied hitboxes.
 
-## UI Notes (current)
-- Next fruit display uses transparent background (no inner circle plate).
-- Fruit Order list is visually grouped with line separators.
+## UI Notes (Current)
+- Next fruit display uses a transparent background (no inner circle plate).
+- Fruit order list is visually grouped with line separators.
 - Bottom board frame and floor shading were adjusted for a smoother board edge.
 
 ## Deploy (GitHub Pages)
@@ -106,6 +129,6 @@ This prevents stale `localStorage` editor data from overriding JSON-applied hitb
 ## Main Files
 - `index.html`: layout and HUD
 - `styles.css`: UI theme and responsive styling
-- `game.js`: physics, rendering, gameplay logic, hitbox runtime
+- `game.js`: physics, rendering, gameplay logic, and hitbox runtime
 - `assets/`: fruit images and hitbox JSON
 - `hitbox-editor/`: local Python editor and apply script
