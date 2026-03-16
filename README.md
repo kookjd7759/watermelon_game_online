@@ -45,17 +45,20 @@ Source of truth: `game.js`
 
 ### Core
 - `GAME_SPEED = 1.3`
-- `GAME_OVER_SECONDS = 3`
+- `GAME_OVER_SECONDS = 2.5`
 
 ### Danger Timer
 - If the danger condition clears, the timer resets to `0` immediately.
 - The danger line turns red after `0.5s` in danger (`DANGER_LINE_RED_DELAY_SECONDS = 0.5`).
 
 ### Physics
-- `FLOOR_FRICTION = 0.995`
-- `SURFACE_FRICTION = 0.9960`
-- `COLLISION_FRICTION = 0.55`
-- `AIR_DAMPING = 0.9987`
+- `AIR_DAMPING = 0.9995`
+- `FRUIT_STATIC_FRICTION = 0.68`
+- `FRUIT_DYNAMIC_FRICTION = 0.52`
+- `WORLD_STATIC_FRICTION = 0.62`
+- `WORLD_DYNAMIC_FRICTION = 0.46`
+- `FRUIT_RESTITUTION = 0.11`
+- `WORLD_RESTITUTION = 0.06`
 
 ## Fruit Radius Table
 Source of truth: `const FRUITS` in `game.js`
@@ -67,12 +70,12 @@ Source of truth: `const FRUITS` in `game.js`
 | 3 | Grape | 29 |
 | 4 | Hallabong | 38 |
 | 5 | Persimmon | 50 |
-| 6 | Apple | 65 |
-| 7 | Pear | 98 |
-| 8 | Peach | 96 |
-| 9 | Pineapple | 131 |
-| 10 | Melon | 142 |
-| 11 | Watermelon | 200 |
+| 6 | Apple | 55.25 |
+| 7 | Pear | 88.2 |
+| 8 | Peach | 86.4 |
+| 9 | Pineapple | 123.795 |
+| 10 | Melon | 127.8 |
+| 11 | Watermelon | 153 |
 
 Note: Runtime collision size is also affected by `FRUIT_COLLISION_SCALES`, render scale, and hitbox expansion constants.
 
@@ -132,3 +135,4 @@ This prevents stale `localStorage` editor data from overriding JSON-applied hitb
 - `game.js`: physics, rendering, gameplay logic, and hitbox runtime
 - `assets/`: fruit images and hitbox JSON
 - `hitbox-editor/`: local Python editor and apply script
+

@@ -28,23 +28,34 @@ const FIXED_STEP_MS = 1000 / PHYSICS_FPS;
 const MAX_CATCHUP_STEPS = 5;
 
 const BASE_GRAVITY = 0.1696;
-const AIR_DAMPING = 0.9987;
-const FRUIT_CONTACT_FRICTION = 0.9;
-const WORLD_CONTACT_FRICTION = 0.8;
-const FRUIT_RESTITUTION = 0.03;
-const WORLD_RESTITUTION = 0.01;
-const TANGENT_SPIN_EPSILON = 0.02;
+const AIR_DAMPING = 0.9995;
+const FRUIT_STATIC_FRICTION = 0.68;
+const FRUIT_DYNAMIC_FRICTION = 0.52;
+const WORLD_STATIC_FRICTION = 0.62;
+const WORLD_DYNAMIC_FRICTION = 0.46;
+const FRUIT_RESTITUTION = 0.11;
+const WORLD_RESTITUTION = 0.06;
+const TANGENT_SPIN_EPSILON = 0.002;
 const INERTIA_SCALE = 0.58;
-const ANGULAR_DAMPING = 0.9945;
-const MAX_ANGULAR_SPEED = 0.26;
-const REST_LINEAR_EPSILON = 0.015;
-const REST_ANGULAR_EPSILON = 0.0019;
-const ANGULAR_REST_LOCK = 0.0026;
-const VELOCITY_DAMPING = 0.999;
-const CONTACT_SLOP = 0.1;
-const POSITION_CORRECTION = 0.9;
-const MIN_BOUNCE_SPEED = 0.72;
-const SOLVER_ITERATIONS = 8;
+const ANGULAR_DAMPING = 0.9982;
+const MAX_ANGULAR_SPEED = 0.28;
+const REST_LINEAR_EPSILON = 0.006;
+const REST_ANGULAR_EPSILON = 0.0008;
+const ANGULAR_REST_LOCK = 0.0012;
+const VELOCITY_DAMPING = 1;
+const CONTACT_SLOP = 0.06;
+const POSITION_CORRECTION = 0.78;
+const MIN_BOUNCE_SPEED = 0.12;
+const SOLVER_ITERATIONS = 10;
+const MID_AIR_SLEEP_SCALE = 0.08;
+const FLOOR_REST_LOCK_VX = 0.04;
+const FLOOR_REST_LOCK_VY = 0.028;
+const FLOOR_REST_LOCK_AV = 0.006;
+const STACK_REST_LOCK_VX = 0.036;
+const STACK_REST_LOCK_VY = 0.05;
+const STACK_REST_LOCK_AV = 0.009;
+const STACK_REST_MIN_CONTACTS = 2;
+const NORMAL_SPIN_SPEED_CUTOFF = 0.14;
 
 const DROP_COOLDOWN_MS = Math.round(460 / GAME_SPEED);
 const DROP_DEBOUNCE_MS = 90;
@@ -68,12 +79,12 @@ const FRUITS = [
   { name: 'Grape', label: 'Grape', radius: 29, score: 6, color: '#7c6cff', skin: 'grape' },
   { name: 'Hallabong', label: 'Hallabong', radius: 38, score: 10, color: '#ffb347', skin: 'dekopon' },
   { name: 'Persimmon', label: 'Persimmon', radius: 50, score: 15, color: '#ff8f4a', skin: 'persimmon' },
-  { name: 'Apple', label: 'Apple', radius: 65, score: 21, color: '#ff6666', skin: 'apple' },
-  { name: 'Pear', label: 'Pear', radius: 98, score: 28, color: '#d6df6e', skin: 'pear' },
-  { name: 'Peach', label: 'Peach', radius: 96, score: 36, color: '#ffb29f', skin: 'peach' },
-  { name: 'Pineapple', label: 'Pineapple', radius: 131, score: 45, color: '#ffd368', skin: 'pineapple' },
-  { name: 'Melon', label: 'Melon', radius: 142, score: 55, color: '#94df73', skin: 'melon' },
-  { name: 'Watermelon', label: 'Watermelon', radius: 200, score: 66, color: '#46b55d', skin: 'watermelon' },
+  { name: 'Apple', label: 'Apple', radius: 55.25, score: 21, color: '#ff6666', skin: 'apple' },
+  { name: 'Pear', label: 'Pear', radius: 88.2, score: 28, color: '#d6df6e', skin: 'pear' },
+  { name: 'Peach', label: 'Peach', radius: 86.4, score: 36, color: '#ffb29f', skin: 'peach' },
+  { name: 'Pineapple', label: 'Pineapple', radius: 123.795, score: 45, color: '#ffd368', skin: 'pineapple' },
+  { name: 'Melon', label: 'Melon', radius: 127.8, score: 55, color: '#94df73', skin: 'melon' },
+  { name: 'Watermelon', label: 'Watermelon', radius: 153, score: 66, color: '#46b55d', skin: 'watermelon' },
 ];
 
 // Per-fruit radius tuning for gameplay feel and progression balance.
@@ -105,6 +116,11 @@ const MIN_SPRITE_SCALE = 0.92;
 const MAX_SPRITE_SCALE = 1.16;
 const fruitRenderScales = FRUITS.map(() => DEFAULT_SPRITE_SCALE);
 const DEFAULT_HITBOX_TEMPLATE = Object.freeze([{ x: 0, y: 0, r: 0.92 }]);
+const DEFAULT_TEMPLATE_AREA_NORM = DEFAULT_HITBOX_TEMPLATE[0].r * DEFAULT_HITBOX_TEMPLATE[0].r;
+const DEFAULT_FRUIT_MASS_PROPERTIES = Object.freeze({
+  areaFactor: 1,
+  inertiaRatio: 1,
+});
 // Hand-tuned collision templates (normalized to sprite half-size).
 // Decorative stems/leaves are intentionally excluded to keep contact stable.
 const FRUIT_MANUAL_HITBOX_TEMPLATES = [
@@ -235,6 +251,7 @@ const FRUIT_HITBOX_EXPANSION = [
 ];
 const fruitHitboxTemplates = FRUIT_MANUAL_HITBOX_TEMPLATES.map((template, type) => cloneHitboxTemplate(template, type));
 const fruitHitboxBounds = fruitHitboxTemplates.map((template) => getTemplateBoundRadius(template));
+const fruitMassProperties = fruitHitboxTemplates.map((template, type) => getTemplateMassProperties(template, fruitHitboxBounds[type]));
 const analysisCanvas = document.createElement('canvas');
 analysisCanvas.width = HITBOX_ANALYSIS_SIZE;
 analysisCanvas.height = HITBOX_ANALYSIS_SIZE;
@@ -301,6 +318,52 @@ function getTemplateBoundRadius(template) {
   return bound;
 }
 
+function getTemplateMassProperties(template, boundNorm = getTemplateBoundRadius(template)) {
+  if (!Array.isArray(template) || template.length === 0) {
+    return DEFAULT_FRUIT_MASS_PROPERTIES;
+  }
+
+  let areaNorm = 0;
+  let centroidX = 0;
+  let centroidY = 0;
+
+  for (const circle of template) {
+    const r = Number.isFinite(circle?.r) ? Math.max(0.02, circle.r) : DEFAULT_HITBOX_TEMPLATE[0].r;
+    const x = Number.isFinite(circle?.x) ? circle.x : 0;
+    const y = Number.isFinite(circle?.y) ? circle.y : 0;
+    const weight = r * r;
+    areaNorm += weight;
+    centroidX += x * weight;
+    centroidY += y * weight;
+  }
+
+  if (areaNorm <= 0.000001) return DEFAULT_FRUIT_MASS_PROPERTIES;
+  centroidX /= areaNorm;
+  centroidY /= areaNorm;
+
+  let momentNorm = 0;
+  for (const circle of template) {
+    const r = Number.isFinite(circle?.r) ? Math.max(0.02, circle.r) : DEFAULT_HITBOX_TEMPLATE[0].r;
+    const x = Number.isFinite(circle?.x) ? circle.x : 0;
+    const y = Number.isFinite(circle?.y) ? circle.y : 0;
+    const dx = x - centroidX;
+    const dy = y - centroidY;
+    const r2 = r * r;
+    const d2 = (dx * dx) + (dy * dy);
+    momentNorm += r2 * ((0.5 * r2) + d2);
+  }
+
+  const inertiaRadiusNorm = Math.sqrt(Math.max(0.05, momentNorm / areaNorm));
+  const safeBoundNorm = Math.max(0.05, Number.isFinite(boundNorm) ? boundNorm : DEFAULT_HITBOX_TEMPLATE[0].r);
+  const inertiaRatio = clamp(inertiaRadiusNorm / safeBoundNorm, 0.72, 1.2);
+  const areaFactor = clamp(Math.sqrt(areaNorm / DEFAULT_TEMPLATE_AREA_NORM), 0.82, 1.24);
+
+  return {
+    areaFactor,
+    inertiaRatio,
+  };
+}
+
 function getFruitHitboxExpansion(type) {
   const expansion = FRUIT_HITBOX_EXPANSION[type];
   const perFruit = Number.isFinite(expansion) ? expansion : 1;
@@ -327,6 +390,10 @@ function getFruitHitboxTemplate(type) {
   return fruitHitboxTemplates[type] || DEFAULT_HITBOX_TEMPLATE;
 }
 
+function getFruitMassProperties(type) {
+  return fruitMassProperties[type] || DEFAULT_FRUIT_MASS_PROPERTIES;
+}
+
 function getFruitHitboxScale(type, radius = getFruitRadius(type)) {
   return radius * getFruitRenderScale(type);
 }
@@ -337,8 +404,9 @@ function updateFruitGeometry(fruit) {
   fruit.hitboxScale = getFruitHitboxScale(fruit.type, fruit.r);
   const boundNorm = fruitHitboxBounds[fruit.type] || getTemplateBoundRadius(template);
   fruit.boundR = boundNorm * fruit.hitboxScale;
+  fruit.mass = getMass(fruit.type);
 
-  fruit.inertia = computeInertia(fruit.mass, fruit.boundR || fruit.r);
+  fruit.inertia = computeInertia(fruit.mass, fruit.boundR || fruit.r, fruit.type);
   fruit.invMass = fruit.mass > 0 ? 1 / fruit.mass : 0;
   fruit.invInertia = fruit.inertia > 0 ? 1 / fruit.inertia : 0;
 }
@@ -367,6 +435,7 @@ function updateFruitHitbox(type) {
   const circles = cloneHitboxTemplate(template, type);
   fruitHitboxTemplates[type] = circles;
   fruitHitboxBounds[type] = getTemplateBoundRadius(circles);
+  fruitMassProperties[type] = getTemplateMassProperties(circles, fruitHitboxBounds[type]);
 }
 
 function refreshFruitAssetUi() {
@@ -487,13 +556,17 @@ function getFruitRadius(type) {
 function getMass(type) {
   const baseRadius = Math.max(1, getFruitRadius(0));
   const ratio = getFruitRadius(type) / baseRadius;
-  const mass = 0.288 * Math.pow(ratio, 1.28);
+  const shapeFactor = getFruitMassProperties(type).areaFactor;
+  const mass = 0.288 * Math.pow(ratio, 1.28) * shapeFactor;
   return clamp(mass, 0.24, 3.28);
 }
 
-function computeInertia(mass, boundRadius) {
+function computeInertia(mass, boundRadius, type = -1) {
   const radius = Math.max(8, boundRadius);
-  return mass * radius * radius * INERTIA_SCALE;
+  const shape = type >= 0 ? getFruitMassProperties(type) : DEFAULT_FRUIT_MASS_PROPERTIES;
+  const shapeRatio = Number.isFinite(shape?.inertiaRatio) ? shape.inertiaRatio : 1;
+  const adjustedRadius = radius * shapeRatio;
+  return mass * adjustedRadius * adjustedRadius * INERTIA_SCALE;
 }
 
 function getGravityScale(type) {
@@ -1680,6 +1753,7 @@ function createFruit(type, x, y = SPAWN_Y) {
     invInertia: 0,
     pendingContactSpin: 0,
     contactCount: 0,
+    restContactCount: 0,
     bornFrame: frameCount,
     mergeCooldown: 8,
     remove: false,
@@ -1789,6 +1863,11 @@ function resetContactAccumulator(fruit) {
   fruit.contactCount = 0;
 }
 
+function markRestContact(fruit, count = 1) {
+  if (!fruit || fruit.remove) return;
+  fruit.restContactCount = (fruit.restContactCount || 0) + count;
+}
+
 function getContactVelocity(fruit, rx, ry) {
   const angularVelocity = fruit.av + fruit.pendingContactSpin;
   return {
@@ -1818,7 +1897,17 @@ function commitContactRotation(fruit) {
   fruit.contactCount = 0;
 }
 
-function resolvePairImpulse(a, b, nx, ny, contactX, contactY, restitution = 0, friction = 0) {
+function resolvePairImpulse(
+  a,
+  b,
+  nx,
+  ny,
+  contactX,
+  contactY,
+  restitution = 0,
+  staticFriction = 0,
+  dynamicFriction = staticFriction,
+) {
   const raX = contactX - a.x;
   const raY = contactY - a.y;
   const rbX = contactX - b.x;
@@ -1849,10 +1938,12 @@ function resolvePairImpulse(a, b, nx, ny, contactX, contactY, restitution = 0, f
   b.vx += ix * b.invMass;
   b.vy += iy * b.invMass;
 
-  accumulateContactSpin(a, -ix, -iy, raX, raY);
-  accumulateContactSpin(b, ix, iy, rbX, rbY);
+  if (Math.abs(speedNormal) > NORMAL_SPIN_SPEED_CUTOFF) {
+    accumulateContactSpin(a, -ix, -iy, raX, raY);
+    accumulateContactSpin(b, ix, iy, rbX, rbY);
+  }
 
-  if (friction <= 0) return;
+  if (staticFriction <= 0 && dynamicFriction <= 0) return;
 
   const tx = -ny;
   const ty = nx;
@@ -1866,9 +1957,13 @@ function resolvePairImpulse(a, b, nx, ny, contactX, contactY, restitution = 0, f
   const tangentDenom = a.invMass + b.invMass + (raCrossT * raCrossT * a.invInertia) + (rbCrossT * rbCrossT * b.invInertia);
   if (tangentDenom <= 0) return;
 
-  let tangentImpulse = -tangentSpeed / tangentDenom;
-  const maxFrictionImpulse = impulseNormal * friction;
-  tangentImpulse = clamp(tangentImpulse, -maxFrictionImpulse, maxFrictionImpulse);
+  const fullStopImpulse = -tangentSpeed / tangentDenom;
+  const staticLimit = impulseNormal * staticFriction;
+  let tangentImpulse = fullStopImpulse;
+  if (Math.abs(fullStopImpulse) > staticLimit) {
+    const kineticLimit = impulseNormal * dynamicFriction;
+    tangentImpulse = -Math.sign(tangentSpeed) * kineticLimit;
+  }
   if (Math.abs(tangentImpulse) < 0.00001) return;
 
   const fix = tangentImpulse * tx;
@@ -1883,7 +1978,16 @@ function resolvePairImpulse(a, b, nx, ny, contactX, contactY, restitution = 0, f
   accumulateContactSpin(b, fix, fiy, rbX, rbY);
 }
 
-function resolveWorldImpulse(fruit, nx, ny, contactX, contactY, restitution = 0, friction = 0) {
+function resolveWorldImpulse(
+  fruit,
+  nx,
+  ny,
+  contactX,
+  contactY,
+  restitution = 0,
+  staticFriction = 0,
+  dynamicFriction = staticFriction,
+) {
   const rx = contactX - fruit.x;
   const ry = contactY - fruit.y;
   const vel = getContactVelocity(fruit, rx, ry);
@@ -1903,9 +2007,11 @@ function resolveWorldImpulse(fruit, nx, ny, contactX, contactY, restitution = 0,
 
   fruit.vx += ix * fruit.invMass;
   fruit.vy += iy * fruit.invMass;
-  accumulateContactSpin(fruit, ix, iy, rx, ry);
+  if (Math.abs(speedNormal) > NORMAL_SPIN_SPEED_CUTOFF) {
+    accumulateContactSpin(fruit, ix, iy, rx, ry);
+  }
 
-  if (friction <= 0) return;
+  if (staticFriction <= 0 && dynamicFriction <= 0) return;
 
   const tx = -ny;
   const ty = nx;
@@ -1917,9 +2023,13 @@ function resolveWorldImpulse(fruit, nx, ny, contactX, contactY, restitution = 0,
   const tangentDenom = fruit.invMass + (rCrossT * rCrossT * fruit.invInertia);
   if (tangentDenom <= 0) return;
 
-  let tangentImpulse = -tangentSpeed / tangentDenom;
-  const maxFrictionImpulse = impulseNormal * friction;
-  tangentImpulse = clamp(tangentImpulse, -maxFrictionImpulse, maxFrictionImpulse);
+  const fullStopImpulse = -tangentSpeed / tangentDenom;
+  const staticLimit = impulseNormal * staticFriction;
+  let tangentImpulse = fullStopImpulse;
+  if (Math.abs(fullStopImpulse) > staticLimit) {
+    const kineticLimit = impulseNormal * dynamicFriction;
+    tangentImpulse = -Math.sign(tangentSpeed) * kineticLimit;
+  }
   if (Math.abs(tangentImpulse) < 0.00001) return;
 
   const fix = tangentImpulse * tx;
@@ -1988,6 +2098,8 @@ function solveCollision(a, b, spawnedFruits) {
   }
 
   if (!best) return;
+  markRestContact(a);
+  markRestContact(b);
   if (mergeFruits(a, b, spawnedFruits)) return;
 
   const nx = best.nx;
@@ -2008,7 +2120,17 @@ function solveCollision(a, b, spawnedFruits) {
 
   const contactX = best.ax + nx * best.ar;
   const contactY = best.ay + ny * best.ar;
-  resolvePairImpulse(a, b, nx, ny, contactX, contactY, FRUIT_RESTITUTION, FRUIT_CONTACT_FRICTION);
+  resolvePairImpulse(
+    a,
+    b,
+    nx,
+    ny,
+    contactX,
+    contactY,
+    FRUIT_RESTITUTION,
+    FRUIT_STATIC_FRICTION,
+    FRUIT_DYNAMIC_FRICTION,
+  );
 }
 
 function solveWalls(fruit, applyImpulses = true) {
@@ -2073,37 +2195,112 @@ function solveWalls(fruit, applyImpulses = true) {
   if (floorPenetration > 0) fruit.y -= floorPenetration;
   if (topPenetration > 0) fruit.y += topPenetration;
 
+  const wallContacts = (leftPenetration > 0 ? 1 : 0) + (rightPenetration > 0 ? 1 : 0) + (floorPenetration > 0 ? 1 : 0);
+  if (wallContacts > 0) {
+    markRestContact(fruit, wallContacts);
+  }
+
   if (!applyImpulses) return;
 
   if (leftPenetration > 0) {
-    resolveWorldImpulse(fruit, 1, 0, WALL, leftContactY, WORLD_RESTITUTION, WORLD_CONTACT_FRICTION);
+    resolveWorldImpulse(
+      fruit,
+      1,
+      0,
+      WALL,
+      leftContactY,
+      WORLD_RESTITUTION,
+      WORLD_STATIC_FRICTION,
+      WORLD_DYNAMIC_FRICTION,
+    );
   }
 
   if (rightPenetration > 0) {
-    resolveWorldImpulse(fruit, -1, 0, WIDTH - WALL, rightContactY, WORLD_RESTITUTION, WORLD_CONTACT_FRICTION);
+    resolveWorldImpulse(
+      fruit,
+      -1,
+      0,
+      WIDTH - WALL,
+      rightContactY,
+      WORLD_RESTITUTION,
+      WORLD_STATIC_FRICTION,
+      WORLD_DYNAMIC_FRICTION,
+    );
   }
 
   if (floorPenetration > 0) {
-    resolveWorldImpulse(fruit, 0, -1, floorContactX, HEIGHT, WORLD_RESTITUTION, WORLD_CONTACT_FRICTION);
+    // Prevent asymmetric hitbox micro-torque from causing one-way creep at rest.
+    if (
+      Math.abs(fruit.vx) < FLOOR_REST_LOCK_VX
+      && Math.abs(fruit.vy) < FLOOR_REST_LOCK_VY
+      && Math.abs(fruit.av) < FLOOR_REST_LOCK_AV * 1.8
+    ) {
+      floorContactX = fruit.x;
+    }
+
+    resolveWorldImpulse(
+      fruit,
+      0,
+      -1,
+      floorContactX,
+      HEIGHT,
+      WORLD_RESTITUTION,
+      WORLD_STATIC_FRICTION,
+      WORLD_DYNAMIC_FRICTION,
+    );
   }
 
   if (topPenetration > 0) {
-    resolveWorldImpulse(fruit, 0, 1, topContactX, 0, 0, 0.15);
+    resolveWorldImpulse(fruit, 0, 1, topContactX, 0, 0, 0.12, 0.1);
   }
 }
 
 function settleFruitMotion(fruit) {
   if (fruit.remove) return;
 
-  const nearFloor = fruit.y + (fruit.boundR || fruit.r) >= HEIGHT - 0.4;
+  const boundR = fruit.boundR || fruit.r;
+  const nearFloor = fruit.y + boundR >= HEIGHT - 0.4;
+  const nearLeftWall = fruit.x - boundR <= WALL + 0.35;
+  const nearRightWall = fruit.x + boundR >= WIDTH - WALL - 0.35;
+  const canHardSleep = nearFloor || nearLeftWall || nearRightWall;
+  const linearSleepThreshold = canHardSleep
+    ? REST_LINEAR_EPSILON
+    : REST_LINEAR_EPSILON * MID_AIR_SLEEP_SCALE;
+  const angularSleepThreshold = canHardSleep
+    ? REST_ANGULAR_EPSILON
+    : REST_ANGULAR_EPSILON * MID_AIR_SLEEP_SCALE;
+
   if (nearFloor && Math.abs(fruit.vy) < REST_LINEAR_EPSILON * 1.8) {
     fruit.vy = 0;
   }
 
-  if (Math.abs(fruit.vx) < REST_LINEAR_EPSILON) fruit.vx = 0;
-  if (Math.abs(fruit.vy) < REST_LINEAR_EPSILON) fruit.vy = 0;
+  if (
+    nearFloor
+    && Math.abs(fruit.vx) < FLOOR_REST_LOCK_VX
+    && Math.abs(fruit.vy) < FLOOR_REST_LOCK_VY
+    && Math.abs(fruit.av) < FLOOR_REST_LOCK_AV
+  ) {
+    fruit.vx = 0;
+    fruit.vy = 0;
+    fruit.av = 0;
+  }
 
-  if (Math.abs(fruit.av) < REST_ANGULAR_EPSILON) {
+  const stackResting = (fruit.restContactCount || 0) >= STACK_REST_MIN_CONTACTS;
+  if (
+    stackResting
+    && Math.abs(fruit.vx) < STACK_REST_LOCK_VX
+    && Math.abs(fruit.vy) < STACK_REST_LOCK_VY
+    && Math.abs(fruit.av) < STACK_REST_LOCK_AV
+  ) {
+    fruit.vx = 0;
+    fruit.vy = 0;
+    fruit.av = 0;
+  }
+
+  if (Math.abs(fruit.vx) < linearSleepThreshold) fruit.vx = 0;
+  if (Math.abs(fruit.vy) < linearSleepThreshold) fruit.vy = 0;
+
+  if (Math.abs(fruit.av) < angularSleepThreshold) {
     fruit.av = 0;
   } else if (nearFloor && Math.abs(fruit.av) < ANGULAR_REST_LOCK) {
     fruit.av = 0;
@@ -2160,6 +2357,10 @@ function updateDangerState() {
 
 function physicsStep() {
   for (const fruit of fruits) integrateFruit(fruit);
+  for (const fruit of fruits) {
+    if (!fruit || fruit.remove) continue;
+    fruit.restContactCount = 0;
+  }
 
   const spawnedFruits = [];
 
@@ -2529,6 +2730,7 @@ loadHitboxEditorConfig();
 buildFruitLegend();
 resetGame();
 requestAnimationFrame(frame);
+
 
 
 
