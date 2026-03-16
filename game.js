@@ -79,11 +79,11 @@ const FRUITS = [
   { name: 'Grape', label: 'Grape', radius: 29, score: 6, color: '#7c6cff', skin: 'grape' },
   { name: 'Hallabong', label: 'Hallabong', radius: 38, score: 10, color: '#ffb347', skin: 'dekopon' },
   { name: 'Persimmon', label: 'Persimmon', radius: 50, score: 15, color: '#ff8f4a', skin: 'persimmon' },
-  { name: 'Apple', label: 'Apple', radius: 55.25, score: 21, color: '#ff6666', skin: 'apple' },
-  { name: 'Pear', label: 'Pear', radius: 88.2, score: 28, color: '#d6df6e', skin: 'pear' },
-  { name: 'Peach', label: 'Peach', radius: 86.4, score: 36, color: '#ffb29f', skin: 'peach' },
-  { name: 'Pineapple', label: 'Pineapple', radius: 123.795, score: 45, color: '#ffd368', skin: 'pineapple' },
-  { name: 'Melon', label: 'Melon', radius: 127.8, score: 55, color: '#94df73', skin: 'melon' },
+  { name: 'Apple', label: 'Apple', radius: 55, score: 21, color: '#ff6666', skin: 'apple' },
+  { name: 'Pear', label: 'Pear', radius: 88, score: 28, color: '#d6df6e', skin: 'pear' },
+  { name: 'Peach', label: 'Peach', radius: 86, score: 36, color: '#ffb29f', skin: 'peach' },
+  { name: 'Pineapple', label: 'Pineapple', radius: 124, score: 45, color: '#ffd368', skin: 'pineapple' },
+  { name: 'Melon', label: 'Melon', radius: 128, score: 55, color: '#94df73', skin: 'melon' },
   { name: 'Watermelon', label: 'Watermelon', radius: 153, score: 66, color: '#46b55d', skin: 'watermelon' },
 ];
 
