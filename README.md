@@ -1,9 +1,9 @@
-# Watermelon Game Online
+# Suika game
 
 A browser-playable Suika-style merge game with custom fruit sprites, tuned collision physics, and a local Python hitbox editor workflow.
 
 <p align="center">
-  <a href="https://kookjd7759.github.io/watermelon_game_online/">
+  <a href="https://kookjd7759.github.io/suika-game/">
     <img src="https://img.shields.io/badge/GAME_START-Play_Now-22c55e?style=for-the-badge&logo=googlechrome&logoColor=white" alt="Game Start Badge" />
   </a>
 </p>
@@ -11,7 +11,7 @@ A browser-playable Suika-style merge game with custom fruit sprites, tuned colli
 <p align="center">
   <img src="https://img.shields.io/badge/Stack-HTML%20%7C%20CSS%20%7C%20JavaScript-0f172a?style=flat-square" alt="Stack" />
   <img src="https://img.shields.io/badge/Hitbox_Editor-Python-3776AB?style=flat-square&logo=python&logoColor=white" alt="Hitbox Editor Python" />
-  <a href="https://kookjd7759.github.io/watermelon_game_online/">
+  <a href="https://kookjd7759.github.io/suika-game/">
     <img src="https://img.shields.io/badge/GitHub_Pages-Live-181717?style=flat-square&logo=github&logoColor=white" alt="GitHub Pages Live" />
   </a>
 </p>
@@ -19,7 +19,7 @@ A browser-playable Suika-style merge game with custom fruit sprites, tuned colli
 ## Quick Start
 
 ### Online Demo
-- URL: https://kookjd7759.github.io/watermelon_game_online/
+- URL: https://kookjd7759.github.io/suika-game/
 
 ### Run Locally
 This is a static project (`index.html`, `styles.css`, `game.js`).
